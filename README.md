@@ -38,7 +38,7 @@ Note that when querying software with ``-q`` you have to put the software inform
   ```
 * Make two queries at once:
   ```bash
-  $ ./cpe-search.py -q "Apache 2.4.39" -q "Wordpress 5.7.2":
+  $ ./cpe-search.py -q "Apache 2.4.39" -q "Wordpress 5.7.2"
   cpe:/a:apache:http_server:2.4.39
   [('cpe:/a:apache:http_server:2.4.39', 0.6666666666666665),
    ('cpe:/a:apache:apache-ssl:1.37', 0.5976143046671967),

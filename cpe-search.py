@@ -22,7 +22,7 @@ SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CPE_DICT_URL = "https://nvd.nist.gov/feeds/xml/cpe/dictionary/official-cpe-dictionary_v2.3.xml.zip"
 CPE_DATA_FILES = {"2.2": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.2.json"),
                   "2.3": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.3.json")}
-CPE_DICT_ITEM_RE = re.compile(r"<cpe-item name=\"([^\"]*)\">\s*\n\s*<title[^>]*>([^<]*)</title>.+?(?=<cpe-23:)<cpe-23:cpe23-item name=\"([^\"]*)\"", flags=re.DOTALL)
+CPE_DICT_ITEM_RE = re.compile(r"<cpe-item name=\"([^\"]*)\">.*?<title xml:lang=\"en-US\"[^>]*>([^<]*)</title>.*?<cpe-23:cpe23-item name=\"([^\"]*)\"", flags=re.DOTALL)
 TEXT_TO_VECTOR_RE = re.compile(r"[\w+\.]+")
 CPE_INFOS = []
 
