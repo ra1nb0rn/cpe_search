@@ -2,6 +2,7 @@
 
 import argparse
 from collections import Counter
+import gc
 import math
 import os
 import pprint
@@ -24,7 +25,9 @@ CPE_DATA_FILES = {"2.2": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.2.js
                   "2.3": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.3.json")}
 CPE_DICT_ITEM_RE = re.compile(r"<cpe-item name=\"([^\"]*)\">.*?<title xml:lang=\"en-US\"[^>]*>([^<]*)</title>.*?<cpe-23:cpe23-item name=\"([^\"]*)\"", flags=re.DOTALL)
 TEXT_TO_VECTOR_RE = re.compile(r"[\w+\.]+")
+GET_ALL_CPES_RE = re.compile(r'\["([^"]*)",')
 CPE_INFOS = []
+SILENT = True
 
 
 def parse_args():
@@ -34,26 +37,28 @@ def parse_args():
     parser.add_argument("-c", "--count", default=3, type=int, help="The number of CPEs to show in the similarity overview (default: 3)")
     parser.add_argument("-v", "--version", default="2.2", choices=["2.2", "2.3"], help="The CPE version to use: 2.2 or 2.3 (default: 2.2)")
     parser.add_argument("-q", "--query", dest="queries", metavar="QUERY", action="append", help="A query, i.e. textual software name / title like 'Apache 2.4.39' or 'Wordpress 5.7.2'")
-    # parser.add_argument("queries", metavar="QUERY", nargs="+", help="A query, i.e. textual software info like 'Apache 2.4.39' or 'Wordpress 5.7.2'")
 
     args = parser.parse_args()
     if not args.update and not args.queries:
         parser.print_help()
     return args
 
+def set_silent(silent):
+    global SILENT
+    SILENT = silent
 
 def update(cpe_version):
     """Update locally stored CPE information"""
 
     # download dictionary
-    if sys.stdout.isatty():
+    if not SILENT:
         print("[+] Downloading NVD's official CPE dictionary (might take some time)")
     src = CPE_DICT_URL
     dst = os.path.join(SCRIPT_DIR, src.rsplit("/", 1)[1])
     urlretrieve(CPE_DICT_URL, dst)
 
     # unzip CPE dictionary
-    if sys.stdout.isatty():
+    if not SILENT:
         print("[+] Unzipping dictionary")
     with zipfile.ZipFile(dst,"r") as zip_ref:
         cpe_dict_name = zip_ref.namelist()[0]
@@ -61,7 +66,7 @@ def update(cpe_version):
         zip_ref.extractall(SCRIPT_DIR)
 
     # build custom CPE database, additionally containing term frequencies and normalization factors
-    if sys.stdout.isatty():
+    if not SILENT:
         print("[+] Creating a custom CPE database for future invocations")
     cpe22_infos, cpe23_infos = [], []
     with open(cpe_dict_filepath) as fin:
@@ -100,7 +105,7 @@ def update(cpe_version):
         json.dump(cpe23_infos, fout)
 
     # clean up
-    if sys.stdout.isatty():
+    if not SILENT:
         print("[+] Cleaning up")
     os.remove(dst)
     os.remove(os.path.join(SCRIPT_DIR, cpe_dict_name))
@@ -112,12 +117,11 @@ def update(cpe_version):
     else:
         CPE_INFOS = cpe23_infos
 
-
-def search_cpes(args):
+def _search_cpes(queries_raw, count=3):
     """Facilitate CPE search as specified by the program arguments"""
 
     # create term frequencies and normalization factors for all queries
-    queries = [query.lower() for query in args.queries]
+    queries = [query.lower() for query in queries_raw]
     query_infos = {}
     most_similar = {}
     for query in queries:
@@ -142,29 +146,63 @@ def search_cpes(args):
 
             sim_score = float(inner_product)/float(normalization_factor)
             if sim_score > most_similar[query][0][1]:
-                most_similar[query] = [(cpe, sim_score)] + most_similar[query][:args.count-1]
-            elif len(most_similar[query]) < args.count:
+                most_similar[query] = [(cpe, sim_score)] + most_similar[query][:count-1]
+            elif len(most_similar[query]) < count:
                 most_similar[query].append((cpe, sim_score))
 
-    # print results
-    for i, query in enumerate(args.queries):
-        if i > 0:
-            print()
-        print(most_similar[query.lower()][0][0])
-        if sys.stdout.isatty():
-            pprint.pprint(most_similar[query.lower()])
+    # create results
+    results = {}
+    for query in queries_raw:
+        results[query] = most_similar[query.lower()]
 
-# main
-args = parse_args()
-if args.update:
-    update(args.version)
+    return results
 
-if args.queries and not CPE_INFOS and not os.path.isfile(CPE_DATA_FILES[args.version]):
-    print("[+] Running initial setup (might take a couple of minutes)", file=sys.stderr)
-    update(args.version)
+def get_all_cpes(version):
+    with open(CPE_DATA_FILES[version], "r") as f:
+        cpes = GET_ALL_CPES_RE.findall(f.read())
+    return cpes
 
-if args.queries:
+def free_memory():
+    global CPE_INFOS
+    del CPE_INFOS
+    gc.collect()
+
+def search_cpes(queries, cpe_version="2.3", count=3):
+    global CPE_INFOS
+
+    if not queries:
+        return {}
+
+    if isinstance(queries, str):
+        queries = [queries]
+
     if not CPE_INFOS:
-        with open(CPE_DATA_FILES[args.version], "r") as f:
-            CPE_INFOS = json.load(f)
-    search_cpes(args)
+        if not os.path.isfile(CPE_DATA_FILES[cpe_version]):
+            update(cpe_version)
+        else:
+            with open(CPE_DATA_FILES[cpe_version], "r") as f:
+                CPE_INFOS = json.load(f)
+    
+    return _search_cpes(queries, count)
+
+if __name__ == "__main__":
+    SILENT = not sys.stdout.isatty()
+    args = parse_args()
+    if args.update:
+        update(args.version)
+
+    if args.queries and not CPE_INFOS and not os.path.isfile(CPE_DATA_FILES[args.version]):
+        if not SILENT:
+            print("[+] Running initial setup (might take a couple of minutes)", file=sys.stderr)
+        update(args.version)
+
+    if args.queries:
+        results = search_cpes(args.queries, args.version, args.count)
+
+        for i, query in enumerate(results):
+            if not SILENT and i > 0:
+                print()
+
+            print(results[query][0][0])
+            if not SILENT:
+                pprint.pprint(results[query])
