@@ -99,10 +99,12 @@ def update(cpe_version):
                     cpe23_infos.append(cpe_info)
 
     # store customly built CPE database
-    with open(CPE_DATA_FILES["2.2"], "w") as fout:
-        json.dump(cpe22_infos, fout)
-    with open(CPE_DATA_FILES["2.3"], "w") as fout:
-        json.dump(cpe23_infos, fout)
+    if cpe_version == "2.2":
+        with open(CPE_DATA_FILES["2.2"], "w") as fout:
+            json.dump(cpe22_infos, fout)
+    else:
+        with open(CPE_DATA_FILES["2.3"], "w") as fout:
+            json.dump(cpe23_infos, fout)
 
     # clean up
     if not SILENT:
