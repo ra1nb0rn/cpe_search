@@ -166,7 +166,8 @@ def get_all_cpes(version):
 
 def free_memory():
     global CPE_INFOS
-    del CPE_INFOS
+
+    CPE_INFOS = None
     gc.collect()
 
 def search_cpes(queries, cpe_version="2.3", count=3):
