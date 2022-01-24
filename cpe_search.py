@@ -119,7 +119,7 @@ def update(cpe_version):
     else:
         CPE_INFOS = cpe23_infos
 
-def _search_cpes(queries_raw, count=3):
+def _search_cpes(queries_raw, count, threshold):
     """Facilitate CPE search as specified by the program arguments"""
 
     # create term frequencies and normalization factors for all queries
@@ -147,6 +147,10 @@ def _search_cpes(queries_raw, count=3):
                 continue
 
             sim_score = float(inner_product)/float(normalization_factor)
+
+            if threshold > 0 and sim_score < threshold:
+                continue
+
             if sim_score > most_similar[query][0][1]:
                 most_similar[query] = [(cpe, sim_score)] + most_similar[query][:count-1]
             elif len(most_similar[query]) < count:
@@ -156,6 +160,15 @@ def _search_cpes(queries_raw, count=3):
     results = {}
     for query in queries_raw:
         results[query] = most_similar[query.lower()]
+
+        rm_idxs = []
+        for i, result in enumerate(results[query]):
+            if result[1] == -1:
+                rm_idxs.append(i)
+
+        for i in rm_idxs:
+            del results[query][i]
+
 
     return results
 
@@ -170,7 +183,7 @@ def free_memory():
     CPE_INFOS = None
     gc.collect()
 
-def search_cpes(queries, cpe_version="2.3", count=3):
+def search_cpes(queries, cpe_version="2.3", count=3, threshold=-1):
     global CPE_INFOS
 
     if not queries:
@@ -186,7 +199,7 @@ def search_cpes(queries, cpe_version="2.3", count=3):
             with open(CPE_DATA_FILES[cpe_version], "r") as f:
                 CPE_INFOS = json.load(f)
     
-    return _search_cpes(queries, count)
+    return _search_cpes(queries, count, threshold)
 
 if __name__ == "__main__":
     SILENT = not sys.stdout.isatty()
