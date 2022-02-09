@@ -2,7 +2,6 @@
 
 import argparse
 from collections import Counter
-import gc
 import math
 import os
 import pprint
@@ -17,16 +16,14 @@ try:  # use ujson if available
 except ModuleNotFoundError:
     import json
 
-
 # Constants
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CPE_DICT_URL = "https://nvd.nist.gov/feeds/xml/cpe/dictionary/official-cpe-dictionary_v2.3.xml.zip"
-CPE_DATA_FILES = {"2.2": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.2.json"),
-                  "2.3": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.3.json")}
+CPE_DATA_FILES = {"2.2": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.2.csv"),
+                  "2.3": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.3.csv")}
 CPE_DICT_ITEM_RE = re.compile(r"<cpe-item name=\"([^\"]*)\">.*?<title xml:lang=\"en-US\"[^>]*>([^<]*)</title>.*?<cpe-23:cpe23-item name=\"([^\"]*)\"", flags=re.DOTALL)
 TEXT_TO_VECTOR_RE = re.compile(r"[\w+\.]+")
-GET_ALL_CPES_RE = re.compile(r'\["([^"]*)",')
-CPE_INFOS = []
+GET_ALL_CPES_RE = re.compile(r'(.*);.*;.*')
 SILENT = True
 
 
@@ -101,10 +98,12 @@ def update(cpe_version):
     # store customly built CPE database
     if cpe_version == "2.2":
         with open(CPE_DATA_FILES["2.2"], "w") as fout:
-            json.dump(cpe22_infos, fout)
+            for cpe, cpe_tf, cpe_abs in cpe22_infos:
+                fout.write('%s;%s;%f\n' % (cpe, json.dumps(cpe_tf), cpe_abs))
     else:
         with open(CPE_DATA_FILES["2.3"], "w") as fout:
-            json.dump(cpe23_infos, fout)
+            for cpe, cpe_tf, cpe_abs in cpe23_infos:
+                fout.write('%s;%s;%f\n' % (cpe, json.dumps(cpe_tf), cpe_abs))
 
     # clean up
     if not SILENT:
@@ -112,14 +111,7 @@ def update(cpe_version):
     os.remove(dst)
     os.remove(os.path.join(SCRIPT_DIR, cpe_dict_name))
 
-    # set CPE infos
-    global CPE_INFOS
-    if cpe_version == "2.2":
-        CPE_INFOS = cpe22_infos
-    else:
-        CPE_INFOS = cpe23_infos
-
-def _search_cpes(queries_raw, count, threshold):
+def _search_cpes(queries_raw, cpe_version, count, threshold):
     """Facilitate CPE search as specified by the program arguments"""
 
     # create term frequencies and normalization factors for all queries
@@ -135,26 +127,31 @@ def _search_cpes(queries_raw, count, threshold):
         most_similar[query] = [("N/A", -1)]
 
     # iterate over every CPE, for every query compute similarity scores and keep track of most similar CPEs
-    for cpe, cpe_tf, cpe_abs in CPE_INFOS:
-        for query in queries:
-            query_tf, query_abs = query_infos[query]
-            intersecting_words = set(cpe_tf.keys()) & set(query_tf.keys())
-            inner_product = sum([cpe_tf[w] * query_tf[w] for w in intersecting_words])
+    with open(CPE_DATA_FILES[cpe_version], "r") as fout:
+        for line in fout:
+            cpe, cpe_tf, cpe_abs = line.rsplit(';', maxsplit=2)
+            cpe_tf = json.loads(cpe_tf)
+            cpe_abs = float(cpe_abs)
 
-            normalization_factor = cpe_abs * query_abs
+            for query in queries:
+                query_tf, query_abs = query_infos[query]
+                intersecting_words = set(cpe_tf.keys()) & set(query_tf.keys())
+                inner_product = sum([cpe_tf[w] * query_tf[w] for w in intersecting_words])
 
-            if not normalization_factor:  # avoid divison by 0
-                continue
+                normalization_factor = cpe_abs * query_abs
 
-            sim_score = float(inner_product)/float(normalization_factor)
+                if not normalization_factor:  # avoid divison by 0
+                    continue
 
-            if threshold > 0 and sim_score < threshold:
-                continue
+                sim_score = float(inner_product)/float(normalization_factor)
 
-            if sim_score > most_similar[query][0][1]:
-                most_similar[query] = [(cpe, sim_score)] + most_similar[query][:count-1]
-            elif len(most_similar[query]) < count:
-                most_similar[query].append((cpe, sim_score))
+                if threshold > 0 and sim_score < threshold:
+                    continue
+
+                if sim_score > most_similar[query][0][1]:
+                    most_similar[query] = [(cpe, sim_score)] + most_similar[query][:count-1]
+                elif len(most_similar[query]) < count:
+                    most_similar[query].append((cpe, sim_score))
 
     # create results
     results = {}
@@ -169,7 +166,6 @@ def _search_cpes(queries_raw, count, threshold):
         for i in rm_idxs:
             del results[query][i]
 
-
     return results
 
 def get_all_cpes(version):
@@ -177,29 +173,14 @@ def get_all_cpes(version):
         cpes = GET_ALL_CPES_RE.findall(f.read())
     return cpes
 
-def free_memory():
-    global CPE_INFOS
-
-    CPE_INFOS = None
-    gc.collect()
-
 def search_cpes(queries, cpe_version="2.3", count=3, threshold=-1):
-    global CPE_INFOS
-
     if not queries:
         return {}
 
     if isinstance(queries, str):
         queries = [queries]
 
-    if not CPE_INFOS:
-        if not os.path.isfile(CPE_DATA_FILES[cpe_version]):
-            update(cpe_version)
-        else:
-            with open(CPE_DATA_FILES[cpe_version], "r") as f:
-                CPE_INFOS = json.load(f)
-    
-    return _search_cpes(queries, count, threshold)
+    return _search_cpes(queries, cpe_version, count, threshold)
 
 if __name__ == "__main__":
     SILENT = not sys.stdout.isatty()
@@ -207,7 +188,7 @@ if __name__ == "__main__":
     if args.update:
         update(args.version)
 
-    if args.queries and not CPE_INFOS and not os.path.isfile(CPE_DATA_FILES[args.version]):
+    if args.queries and not os.path.isfile(CPE_DATA_FILES[args.version]):
         if not SILENT:
             print("[+] Running initial setup (might take a couple of minutes)", file=sys.stderr)
         update(args.version)
