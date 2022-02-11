@@ -24,6 +24,7 @@ CPE_DATA_FILES = {"2.2": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.2.cs
 CPE_DICT_ITEM_RE = re.compile(r"<cpe-item name=\"([^\"]*)\">.*?<title xml:lang=\"en-US\"[^>]*>([^<]*)</title>.*?<cpe-23:cpe23-item name=\"([^\"]*)\"", flags=re.DOTALL)
 TEXT_TO_VECTOR_RE = re.compile(r"[\w+\.]+")
 GET_ALL_CPES_RE = re.compile(r'(.*);.*;.*')
+ALL_CPES = []
 SILENT = True
 
 
@@ -40,9 +41,11 @@ def parse_args():
         parser.print_help()
     return args
 
+
 def set_silent(silent):
     global SILENT
     SILENT = silent
+
 
 def update(cpe_version):
     """Update locally stored CPE information"""
@@ -111,6 +114,7 @@ def update(cpe_version):
     os.remove(dst)
     os.remove(os.path.join(SCRIPT_DIR, cpe_dict_name))
 
+
 def _search_cpes(queries_raw, cpe_version, count, threshold):
     """Facilitate CPE search as specified by the program arguments"""
 
@@ -168,10 +172,156 @@ def _search_cpes(queries_raw, cpe_version, count, threshold):
 
     return results
 
+
+def is_cpe_equal(cpe1, cpe2):
+    """Return True if both CPEs are considered equal, False otherwise"""
+
+    if len(cpe1) != len(cpe2):
+        return False
+
+    for i in range(len(cpe1)):
+        if cpe1[i] != cpe2[i]:
+            if not(cpe1[i] in ('*', '-') and cpe2[i] in('*', '-')):
+                return False
+    return True
+
+
+def _match_cpe23_to_cpe23_from_dict_memory(cpe23_in, keep_data_in_memory=False):
+    """
+    Try to return a valid CPE 2.3 string that exists in the NVD's CPE
+    dictionary based on the given, potentially badly formed, CPE string.
+    """
+
+    global ALL_CPES
+
+    if not ALL_CPES:
+        all_cpes = get_all_cpes(version='2.3')
+        ALL_CPES = all_cpes
+    else:
+        all_cpes = ALL_CPES
+
+    # if CPE is already in the NVD dictionary
+    if cpe23_in in all_cpes:
+        return cpe23_in
+
+    # if the given CPE is simply not a full CPE 2.3 string
+    pot_new_cpe = ''
+    if cpe23_in.count(':') < 12:
+        pot_new_cpe = cpe23_in
+        if pot_new_cpe.endswith(':'):
+            pot_new_cpe += '*'
+        while pot_new_cpe.count(':') < 12:
+            pot_new_cpe += ':*'
+
+    # if the given CPE is simply not a full CPE 2.3 string
+    if cpe23_in.count(':') < 12:
+        new_cpe = cpe23_in
+        if new_cpe.endswith(':'):
+            new_cpe += '*'
+        while new_cpe.count(':') < 12:
+            new_cpe += ':*'
+        for pot_cpe in all_cpes:
+            if new_cpe == pot_cpe:
+                return pot_cpe
+
+    # try to "fix" badly formed CPE strings like
+    # "cpe:2.3:a:proftpd:proftpd:1.3.3c:..." vs. "cpe:2.3:a:proftpd:proftpd:1.3.3:c:..."
+    pre_cpe_in = cpe23_in
+    while pre_cpe_in.count(':') > 3:  # break if next cpe part would be vendor part
+        pre_cpe_in = pre_cpe_in[:-1]
+        if pre_cpe_in.endswith(':') or pre_cpe_in.count(':') > 9:  # skip rear parts in fixing process
+            continue
+
+        for pot_cpe in all_cpes:
+            if pre_cpe_in in pot_cpe:
+
+                # stitch together the found prefix and the remaining part of the original CPE
+                if cpe23_in[len(pre_cpe_in)] == ':':
+                    cpe_in_add_back = cpe23_in[len(pre_cpe_in)+1:]
+                else:
+                    cpe_in_add_back = cpe23_in[len(pre_cpe_in):]
+                new_cpe = '%s:%s' % (pre_cpe_in, cpe_in_add_back)
+
+                # get new_cpe to full CPE 2.3 length by adding or removing wildcards
+                while new_cpe.count(':') < 12:
+                    new_cpe += ':*'
+                if new_cpe.count(':') > 12:
+                    new_cpe = new_cpe[:new_cpe.rfind(':')]
+
+                # if a matching CPE was found, return it
+                if is_cpe_equal(new_cpe, pot_cpe):
+                    return pot_cpe
+
+    return ''
+
+
+def _match_cpe23_to_cpe23_from_dict_file(cpe23_in, keep_data_in_memory=False):
+    """
+    Try to return a valid CPE 2.3 string that exists in the NVD's CPE
+    dictionary based on the given, potentially badly formed, CPE string.
+    """
+
+    # if the given CPE is simply not a full CPE 2.3 string
+    pot_new_cpe = ''
+    if cpe23_in.count(':') < 12:
+        pot_new_cpe = cpe23_in
+        if pot_new_cpe.endswith(':'):
+            pot_new_cpe += '*'
+        while pot_new_cpe.count(':') < 12:
+            pot_new_cpe += ':*'
+
+    pre_cpe_in = cpe23_in
+    while pre_cpe_in.count(':') > 3:  # break if next cpe part would be vendor part
+        pre_cpe_in = pre_cpe_in[:-1]
+        if pre_cpe_in.endswith(':') or pre_cpe_in.count(':') > 9:  # skip rear parts in fixing process
+            continue
+
+        with open(CPE_DATA_FILES['2.3'], "r") as fout:
+            for line in fout:
+                cpe = line.rsplit(';', maxsplit=2)[0].strip()
+
+                if cpe23_in == cpe:
+                    return cpe23_in
+                if pot_new_cpe and pot_new_cpe == cpe:
+                    return pot_new_cpe
+
+                if pre_cpe_in in cpe:
+                    # stitch together the found prefix and the remaining part of the original CPE
+                    if cpe23_in[len(pre_cpe_in)] == ':':
+                        cpe_in_add_back = cpe23_in[len(pre_cpe_in)+1:]
+                    else:
+                        cpe_in_add_back = cpe23_in[len(pre_cpe_in):]
+                    new_cpe = '%s:%s' % (pre_cpe_in, cpe_in_add_back)
+
+                    # get new_cpe to full CPE 2.3 length by adding or removing wildcards
+                    while new_cpe.count(':') < 12:
+                        new_cpe += ':*'
+                    if new_cpe.count(':') > 12:
+                        new_cpe = new_cpe[:new_cpe.rfind(':')]
+
+                    # if a matching CPE was found, return it
+                    if is_cpe_equal(new_cpe, cpe):
+                        return cpe
+    return ''
+
+
+def match_cpe23_to_cpe23_from_dict(cpe23_in, keep_data_in_memory=False):
+    """
+    Try to return a valid CPE 2.3 string that exists in the NVD's CPE
+    dictionary based on the given, potentially badly formed, CPE string.
+    """
+
+    if not keep_data_in_memory:
+        return _match_cpe23_to_cpe23_from_dict_file(cpe23_in)
+    else:
+        return _match_cpe23_to_cpe23_from_dict_memory(cpe23_in)
+
+
 def get_all_cpes(version):
     with open(CPE_DATA_FILES[version], "r") as f:
         cpes = GET_ALL_CPES_RE.findall(f.read())
     return cpes
+
 
 def search_cpes(queries, cpe_version="2.3", count=3, threshold=-1):
     if not queries:
@@ -181,6 +331,7 @@ def search_cpes(queries, cpe_version="2.3", count=3, threshold=-1):
         queries = [queries]
 
     return _search_cpes(queries, cpe_version, count, threshold)
+
 
 if __name__ == "__main__":
     SILENT = not sys.stdout.isatty()
