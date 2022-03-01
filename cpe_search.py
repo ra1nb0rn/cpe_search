@@ -120,6 +120,19 @@ def _search_cpes(queries_raw, cpe_version, count, threshold):
 
     # create term frequencies and normalization factors for all queries
     queries = [query.lower() for query in queries_raw]
+
+    # add additional queries to improve retrieval
+    add_queries = []
+    add_queries_mapping = {}
+    for query in queries:
+        if 'httpd' in query:
+            add_query = query.replace('httpd', 'http')
+            add_queries.append(add_query)
+            if query not in add_queries_mapping:
+                add_queries_mapping[query] = []
+            add_queries_mapping[query].append(add_query)
+    queries += add_queries
+
     query_infos = {}
     most_similar = {}
     for query in queries:
@@ -157,18 +170,31 @@ def _search_cpes(queries_raw, cpe_version, count, threshold):
                 elif len(most_similar[query]) < count:
                     most_similar[query].append((cpe, sim_score))
 
-    # create results
-    results = {}
-    for query in queries_raw:
-        results[query] = most_similar[query.lower()]
+    # create intermediate results (including any additional queries)
+    intermediate_results = {}
+    for query in queries:
+        intermediate_results[query] = most_similar[query]
 
         rm_idxs = []
-        for i, result in enumerate(results[query]):
+        for i, result in enumerate(intermediate_results[query]):
             if result[1] == -1:
                 rm_idxs.append(i)
 
         for i in rm_idxs:
-            del results[query][i]
+            del intermediate_results[query][i]
+
+    # create final results
+    results = {}
+    for query_raw in queries_raw:
+        query = query_raw.lower()
+        if query not in add_queries_mapping:
+            results[query_raw] = intermediate_results[query]
+        else:
+            most_similar = intermediate_results[query]
+            for add_query in add_queries_mapping[query]:
+                if intermediate_results[add_query][0][1] > most_similar[0][1]:
+                    most_similar = intermediate_results[add_query]
+            results[query_raw] = most_similar
 
     return results
 
