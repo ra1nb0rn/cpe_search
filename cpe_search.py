@@ -192,7 +192,7 @@ def _search_cpes(queries_raw, cpe_version, count, threshold):
         else:
             most_similar = intermediate_results[query]
             for add_query in add_queries_mapping[query]:
-                if intermediate_results[add_query][0][1] > most_similar[0][1]:
+                if not most_similar or intermediate_results[add_query][0][1] > most_similar[0][1]:
                     most_similar = intermediate_results[add_query]
             results[query_raw] = most_similar
 
