@@ -6,6 +6,7 @@ import math
 import os
 import pprint
 import re
+import string
 import sys
 from urllib.parse import unquote
 from urllib.request import urlretrieve
@@ -26,6 +27,7 @@ TEXT_TO_VECTOR_RE = re.compile(r"[\w+\.]+")
 GET_ALL_CPES_RE = re.compile(r'(.*);.*;.*')
 ALL_CPES = []
 SILENT = True
+ALT_QUERY_MAXSPLIT = 1
 
 
 def parse_args():
@@ -115,23 +117,63 @@ def update(cpe_version):
     os.remove(os.path.join(SCRIPT_DIR, cpe_dict_name))
 
 
+def _get_alternative_queries(init_queries):
+    alt_queries_mapping = {}
+    for query in init_queries:
+        alt_queries_mapping[query] = []
+
+        # replace 'httpd' with 'http' e.g. for Apache HTTP Server
+        if 'httpd' in query:
+            alt_query = query.replace('httpd', 'http')
+            alt_queries_mapping[query].append(alt_query)
+
+        # split certain version parts with space, e.g. 'openssh 7.4.p1' --> 'openssh 7.4 p1'
+        pot_alt_query = ''
+        cur_char_class = string.ascii_letters
+        did_split = False
+        splits, maxsplit = 0, query.count(' ') + ALT_QUERY_MAXSPLIT
+        for char in query:
+            if char in (' ', '.', '-', '+'):
+                pot_alt_query += char
+                did_split = False
+                continue
+
+            if splits < maxsplit and char not in cur_char_class and not did_split:
+                pot_alt_query += ' '
+                did_split = True
+                splits += 1
+                if char in string.ascii_letters:
+                    cur_char_class = string.ascii_letters
+                else:
+                    try:
+                        int(char)
+                        cur_char_class = '0123456789'
+                    except ValueError:
+                        cur_char_class = '!"#$%&\'()*+,-./:;<=>?@[\]^_`{|}~'
+            pot_alt_query += char
+
+        pot_alt_query_parts = pot_alt_query.split()
+        for i in range(len(pot_alt_query_parts)):
+            if pot_alt_query_parts[i][-1] in ('.', '-', '+'):
+                pot_alt_query_parts[i] = pot_alt_query_parts[i][:-1]
+        pot_alt_query = ' '.join(pot_alt_query_parts)
+
+        if pot_alt_query != query.strip():
+            alt_queries_mapping[query].append(pot_alt_query)
+
+    return alt_queries_mapping
+
+
 def _search_cpes(queries_raw, cpe_version, count, threshold):
     """Facilitate CPE search as specified by the program arguments"""
 
     # create term frequencies and normalization factors for all queries
     queries = [query.lower() for query in queries_raw]
 
-    # add additional queries to improve retrieval
-    add_queries = []
-    add_queries_mapping = {}
-    for query in queries:
-        if 'httpd' in query:
-            add_query = query.replace('httpd', 'http')
-            add_queries.append(add_query)
-            if query not in add_queries_mapping:
-                add_queries_mapping[query] = []
-            add_queries_mapping[query].append(add_query)
-    queries += add_queries
+    # add alternative queries to improve retrieval
+    alt_queries_mapping = _get_alternative_queries(queries)
+    for alt_queries in alt_queries_mapping.values():
+        queries += alt_queries
 
     query_infos = {}
     most_similar = {}
@@ -187,13 +229,13 @@ def _search_cpes(queries_raw, cpe_version, count, threshold):
     results = {}
     for query_raw in queries_raw:
         query = query_raw.lower()
-        if query not in add_queries_mapping:
+        if query not in alt_queries_mapping or not alt_queries_mapping[query]:
             results[query_raw] = intermediate_results[query]
         else:
             most_similar = intermediate_results[query]
-            for add_query in add_queries_mapping[query]:
-                if not most_similar or intermediate_results[add_query][0][1] > most_similar[0][1]:
-                    most_similar = intermediate_results[add_query]
+            for alt_query in alt_queries_mapping[query]:
+                if not most_similar or intermediate_results[alt_query][0][1] > most_similar[0][1]:
+                    most_similar = intermediate_results[alt_query]
             results[query_raw] = most_similar
 
     return results
