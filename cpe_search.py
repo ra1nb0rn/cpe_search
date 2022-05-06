@@ -214,7 +214,11 @@ def _search_cpes(queries_raw, cpe_version, count, threshold):
 
     # create intermediate results (including any additional queries)
     intermediate_results = {}
+    del_queries = []
     for query in queries:
+        if most_similar[query] and len(most_similar[query]) == 1 and most_similar[query][0][1] == -1:
+            continue
+
         intermediate_results[query] = most_similar[query]
 
         rm_idxs = []
@@ -234,6 +238,8 @@ def _search_cpes(queries_raw, cpe_version, count, threshold):
         else:
             most_similar = intermediate_results[query]
             for alt_query in alt_queries_mapping[query]:
+                if alt_query not in intermediate_results:
+                    continue
                 if not most_similar or intermediate_results[alt_query][0][1] > most_similar[0][1]:
                     most_similar = intermediate_results[alt_query]
             results[query_raw] = most_similar
