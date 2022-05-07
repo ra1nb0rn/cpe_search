@@ -8,6 +8,7 @@ import pprint
 import re
 import string
 import sys
+import threading
 from urllib.parse import unquote
 from urllib.request import urlretrieve
 import zipfile
@@ -25,7 +26,10 @@ CPE_DATA_FILES = {"2.2": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.2.cs
 CPE_DICT_ITEM_RE = re.compile(r"<cpe-item name=\"([^\"]*)\">.*?<title xml:lang=\"en-US\"[^>]*>([^<]*)</title>.*?<cpe-23:cpe23-item name=\"([^\"]*)\"", flags=re.DOTALL)
 TEXT_TO_VECTOR_RE = re.compile(r"[\w+\.]+")
 GET_ALL_CPES_RE = re.compile(r'(.*);.*;.*')
-ALL_CPES = []
+LOAD_CPE_TFS_MUTEX = threading.Lock()
+CPE_TFS = []
+TERMS = []
+TERMS_MAP = {}
 SILENT = True
 ALT_QUERY_MAXSPLIT = 1
 
@@ -164,7 +168,30 @@ def _get_alternative_queries(init_queries):
     return alt_queries_mapping
 
 
-def _search_cpes(queries_raw, cpe_version, count, threshold):
+def _load_cpe_tfs(cpe_version="2.3"):
+    """Load CPE TFs from file"""
+
+    LOAD_CPE_TFS_MUTEX.acquire()
+    if not CPE_TFS:
+        # iterate over every CPE, for every query compute similarity scores and keep track of most similar CPEs
+        with open(CPE_DATA_FILES[cpe_version], "r") as fout:
+            for line in fout:
+                cpe, cpe_tf, cpe_abs = line.rsplit(';', maxsplit=2)
+                cpe_tf = json.loads(cpe_tf)
+                indirect_cpe_tf = {}
+                for word, count in cpe_tf.items():
+                    if word not in TERMS_MAP:
+                        TERMS.append(word)
+                        TERMS_MAP[word] = len(TERMS)-1
+                        indirect_cpe_tf[len(TERMS)-1] = count
+                    else:
+                        indirect_cpe_tf[TERMS_MAP[word]] = count
+                cpe_abs = float(cpe_abs)
+                CPE_TFS.append((cpe, indirect_cpe_tf, cpe_abs))
+
+    LOAD_CPE_TFS_MUTEX.release()
+
+def _search_cpes(queries_raw, cpe_version, count, threshold, keep_data_in_memory=False):
     """Facilitate CPE search as specified by the program arguments"""
 
     # create term frequencies and normalization factors for all queries
@@ -185,15 +212,15 @@ def _search_cpes(queries_raw, cpe_version, count, threshold):
         query_infos[query] = (query_tf, query_abs)
         most_similar[query] = [("N/A", -1)]
 
-    # iterate over every CPE, for every query compute similarity scores and keep track of most similar CPEs
-    with open(CPE_DATA_FILES[cpe_version], "r") as fout:
-        for line in fout:
-            cpe, cpe_tf, cpe_abs = line.rsplit(';', maxsplit=2)
-            cpe_tf = json.loads(cpe_tf)
-            cpe_abs = float(cpe_abs)
-
+    if keep_data_in_memory:
+        _load_cpe_tfs(cpe_version)
+        for cpe, indirect_cpe_tf, cpe_abs in CPE_TFS:
             for query in queries:
                 query_tf, query_abs = query_infos[query]
+                cpe_tf = {}
+                for term_idx, term_count in indirect_cpe_tf.items():
+                    cpe_tf[TERMS[term_idx]] = term_count
+
                 intersecting_words = set(cpe_tf.keys()) & set(query_tf.keys())
                 inner_product = sum([cpe_tf[w] * query_tf[w] for w in intersecting_words])
 
@@ -211,10 +238,36 @@ def _search_cpes(queries_raw, cpe_version, count, threshold):
                     most_similar[query] = [(cpe, sim_score)] + most_similar[query][:count-1]
                 elif len(most_similar[query]) < count:
                     most_similar[query].append((cpe, sim_score))
+    else:
+        # iterate over every CPE, for every query compute similarity scores and keep track of most similar
+        with open(CPE_DATA_FILES[cpe_version], "r") as fout:
+            for line in fout:
+                cpe, cpe_tf, cpe_abs = line.rsplit(';', maxsplit=2)
+                cpe_tf = json.loads(cpe_tf)
+                cpe_abs = float(cpe_abs)
+
+                for query in queries:
+                    query_tf, query_abs = query_infos[query]
+                    intersecting_words = set(cpe_tf.keys()) & set(query_tf.keys())
+                    inner_product = sum([cpe_tf[w] * query_tf[w] for w in intersecting_words])
+
+                    normalization_factor = cpe_abs * query_abs
+
+                    if not normalization_factor:  # avoid divison by 0
+                        continue
+
+                    sim_score = float(inner_product)/float(normalization_factor)
+
+                    if threshold > 0 and sim_score < threshold:
+                        continue
+
+                    if sim_score > most_similar[query][0][1]:
+                        most_similar[query] = [(cpe, sim_score)] + most_similar[query][:count-1]
+                    elif len(most_similar[query]) < count:
+                        most_similar[query].append((cpe, sim_score))
 
     # create intermediate results (including any additional queries)
     intermediate_results = {}
-    del_queries = []
     for query in queries:
         if most_similar[query] and len(most_similar[query]) == 1 and most_similar[query][0][1] == -1:
             continue
@@ -233,6 +286,9 @@ def _search_cpes(queries_raw, cpe_version, count, threshold):
     results = {}
     for query_raw in queries_raw:
         query = query_raw.lower()
+        if query not in intermediate_results:
+            continue
+
         if query not in alt_queries_mapping or not alt_queries_mapping[query]:
             results[query_raw] = intermediate_results[query]
         else:
@@ -260,22 +316,16 @@ def is_cpe_equal(cpe1, cpe2):
     return True
 
 
-def _match_cpe23_to_cpe23_from_dict_memory(cpe23_in, keep_data_in_memory=False):
+def _match_cpe23_to_cpe23_from_dict_memory(cpe23_in):
     """
     Try to return a valid CPE 2.3 string that exists in the NVD's CPE
     dictionary based on the given, potentially badly formed, CPE string.
     """
 
-    global ALL_CPES
-
-    if not ALL_CPES:
-        all_cpes = get_all_cpes(version='2.3')
-        ALL_CPES = all_cpes
-    else:
-        all_cpes = ALL_CPES
+    _load_cpe_tfs('2.3')
 
     # if CPE is already in the NVD dictionary
-    if cpe23_in in all_cpes:
+    if (cpe23_in, _, _) in CPE_TFS:
         return cpe23_in
 
     # if the given CPE is simply not a full CPE 2.3 string
@@ -294,7 +344,7 @@ def _match_cpe23_to_cpe23_from_dict_memory(cpe23_in, keep_data_in_memory=False):
             new_cpe += '*'
         while new_cpe.count(':') < 12:
             new_cpe += ':*'
-        for pot_cpe in all_cpes:
+        for (pot_cpe, _, _) in CPE_TFS:
             if new_cpe == pot_cpe:
                 return pot_cpe
 
@@ -306,7 +356,7 @@ def _match_cpe23_to_cpe23_from_dict_memory(cpe23_in, keep_data_in_memory=False):
         if pre_cpe_in.endswith(':') or pre_cpe_in.count(':') > 9:  # skip rear parts in fixing process
             continue
 
-        for pot_cpe in all_cpes:
+        for (pot_cpe, _, _) in CPE_TFS:
             if pre_cpe_in in pot_cpe:
 
                 # stitch together the found prefix and the remaining part of the original CPE
@@ -329,7 +379,7 @@ def _match_cpe23_to_cpe23_from_dict_memory(cpe23_in, keep_data_in_memory=False):
     return ''
 
 
-def _match_cpe23_to_cpe23_from_dict_file(cpe23_in, keep_data_in_memory=False):
+def _match_cpe23_to_cpe23_from_dict_file(cpe23_in):
     """
     Try to return a valid CPE 2.3 string that exists in the NVD's CPE
     dictionary based on the given, potentially badly formed, CPE string.
@@ -392,19 +442,24 @@ def match_cpe23_to_cpe23_from_dict(cpe23_in, keep_data_in_memory=False):
 
 
 def get_all_cpes(version):
-    with open(CPE_DATA_FILES[version], "r") as f:
-        cpes = GET_ALL_CPES_RE.findall(f.read())
+    if not CPE_TFS:
+        with open(CPE_DATA_FILES[version], "r") as f:
+            cpes = GET_ALL_CPES_RE.findall(f.read())
+    else:
+        _load_cpe_tfs(version)
+        cpes = [cpe_tf[0] for cpe_tf in CPE_TFS]
+
     return cpes
 
 
-def search_cpes(queries, cpe_version="2.3", count=3, threshold=-1):
+def search_cpes(queries, cpe_version="2.3", count=3, threshold=-1, keep_data_in_memory=False):
     if not queries:
         return {}
 
     if isinstance(queries, str):
         queries = [queries]
 
-    return _search_cpes(queries, cpe_version, count, threshold)
+    return _search_cpes(queries, cpe_version, count, threshold, keep_data_in_memory)
 
 
 if __name__ == "__main__":
