@@ -325,8 +325,9 @@ def _match_cpe23_to_cpe23_from_dict_memory(cpe23_in):
     _load_cpe_tfs('2.3')
 
     # if CPE is already in the NVD dictionary
-    if (cpe23_in, _, _) in CPE_TFS:
-        return cpe23_in
+    for (pot_cpe, _, _) in CPE_TFS:
+        if cpe23_in == pot_cpe:
+            return cpe23_in
 
     # if the given CPE is simply not a full CPE 2.3 string
     pot_new_cpe = ''
