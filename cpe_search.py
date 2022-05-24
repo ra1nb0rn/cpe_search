@@ -27,6 +27,7 @@ CPE_DICT_ITEM_RE = re.compile(r"<cpe-item name=\"([^\"]*)\">.*?<title xml:lang=\
 TEXT_TO_VECTOR_RE = re.compile(r"[\w+\.]+")
 GET_ALL_CPES_RE = re.compile(r'(.*);.*;.*')
 LOAD_CPE_TFS_MUTEX = threading.Lock()
+VERSION_MATCH_RE = re.compile(r'\b([\d]+\.?){1,4}\b')
 CPE_TFS = []
 TERMS = []
 TERMS_MAP = {}
@@ -121,7 +122,7 @@ def update(cpe_version):
     os.remove(os.path.join(SCRIPT_DIR, cpe_dict_name))
 
 
-def _get_alternative_queries(init_queries):
+def _get_alternative_queries(init_queries, zero_extend_versions=False):
     alt_queries_mapping = {}
     for query in init_queries:
         alt_queries_mapping[query] = []
@@ -155,6 +156,13 @@ def _get_alternative_queries(init_queries):
                     except ValueError:
                         cur_char_class = '!"#$%&\'()*+,-./:;<=>?@[\]^_`{|}~'
             pot_alt_query += char
+
+        # zero extend versions, e.g. 'Apache httpd 2.4' --> 'Apache httpd 2.4.0'
+        if zero_extend_versions:
+            version_match = VERSION_MATCH_RE.search(query)
+            if version_match:
+                alt_query = query.replace(version_match.group(0), version_match.group(0) + '.0')
+                alt_queries_mapping[query].append(alt_query)
 
         pot_alt_query_parts = pot_alt_query.split()
         for i in range(len(pot_alt_query_parts)):
@@ -191,14 +199,15 @@ def _load_cpe_tfs(cpe_version="2.3"):
 
     LOAD_CPE_TFS_MUTEX.release()
 
-def _search_cpes(queries_raw, cpe_version, count, threshold, keep_data_in_memory=False):
+
+def _search_cpes(queries_raw, cpe_version, count, threshold, zero_extend_versions=False, keep_data_in_memory=False):
     """Facilitate CPE search as specified by the program arguments"""
 
     # create term frequencies and normalization factors for all queries
     queries = [query.lower() for query in queries_raw]
 
     # add alternative queries to improve retrieval
-    alt_queries_mapping = _get_alternative_queries(queries)
+    alt_queries_mapping = _get_alternative_queries(queries, zero_extend_versions)
     for alt_queries in alt_queries_mapping.values():
         queries += alt_queries
 
@@ -286,13 +295,16 @@ def _search_cpes(queries_raw, cpe_version, count, threshold, keep_data_in_memory
     results = {}
     for query_raw in queries_raw:
         query = query_raw.lower()
-        if query not in intermediate_results:
+
+        if query not in intermediate_results and (query not in alt_queries_mapping or not alt_queries_mapping[query]):
             continue
 
         if query not in alt_queries_mapping or not alt_queries_mapping[query]:
             results[query_raw] = intermediate_results[query]
         else:
-            most_similar = intermediate_results[query]
+            most_similar = None
+            if query in intermediate_results:
+                most_similar = intermediate_results[query]
             for alt_query in alt_queries_mapping[query]:
                 if alt_query not in intermediate_results:
                     continue
@@ -453,14 +465,14 @@ def get_all_cpes(version):
     return cpes
 
 
-def search_cpes(queries, cpe_version="2.3", count=3, threshold=-1, keep_data_in_memory=False):
+def search_cpes(queries, cpe_version="2.3", count=3, threshold=-1, zero_extend_versions=False, keep_data_in_memory=False):
     if not queries:
         return {}
 
     if isinstance(queries, str):
         queries = [queries]
 
-    return _search_cpes(queries, cpe_version, count, threshold, keep_data_in_memory)
+    return _search_cpes(queries, cpe_version, count, threshold, zero_extend_versions, keep_data_in_memory)
 
 
 if __name__ == "__main__":
