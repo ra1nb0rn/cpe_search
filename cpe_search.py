@@ -27,7 +27,8 @@ CPE_DICT_ITEM_RE = re.compile(r"<cpe-item name=\"([^\"]*)\">.*?<title xml:lang=\
 TEXT_TO_VECTOR_RE = re.compile(r"[\w+\.]+")
 GET_ALL_CPES_RE = re.compile(r'(.*);.*;.*')
 LOAD_CPE_TFS_MUTEX = threading.Lock()
-VERSION_MATCH_RE = re.compile(r'\b([\d]+\.?){1,4}\b')
+VERSION_MATCH_ZE_RE = re.compile(r'\b([\d]+\.?){1,4}\b')
+VERSION_MATCH_CPE_CREATION_RE = re.compile(r'\b([\d]+\.?){1,4}([a-z][\d]{0,3})?[^\w]*$')
 CPE_TFS = []
 TERMS = []
 TERMS_MAP = {}
@@ -159,7 +160,7 @@ def _get_alternative_queries(init_queries, zero_extend_versions=False):
 
         # zero extend versions, e.g. 'Apache httpd 2.4' --> 'Apache httpd 2.4.0'
         if zero_extend_versions:
-            version_match = VERSION_MATCH_RE.search(query)
+            version_match = VERSION_MATCH_ZE_RE.search(query)
             if version_match:
                 alt_query = query.replace(version_match.group(0), version_match.group(0) + '.0')
                 alt_queries_mapping[query].append(alt_query)
@@ -452,6 +453,24 @@ def match_cpe23_to_cpe23_from_dict(cpe23_in, keep_data_in_memory=False):
         return _match_cpe23_to_cpe23_from_dict_file(cpe23_in)
     else:
         return _match_cpe23_to_cpe23_from_dict_memory(cpe23_in)
+
+
+def create_cpe_from_base_cpe_and_query(cpe, query):
+    version_str_match = VERSION_MATCH_CPE_CREATION_RE.search(query)
+    if version_str_match:
+        version_str = version_str_match.group(0).strip()
+        if version_str in cpe:
+            return None
+
+        # try to find earliest wildcard in cpe and replace it with version from query
+        cpe_parts = cpe.split(':')
+        for i, part in reversed(list(enumerate(cpe_parts))):
+            if part in ('*', '-'):
+                if not any([front_part in ('*', '-') for front_part in cpe_parts[:i]]):
+                    cpe_parts[i] = version_str
+                    return ':'.join(cpe_parts)
+
+    return None
 
 
 def get_all_cpes(version):
