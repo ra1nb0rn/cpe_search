@@ -133,18 +133,19 @@ def _get_alternative_queries(init_queries, zero_extend_versions=False):
             alt_query = query.replace('httpd', 'http')
             alt_queries_mapping[query].append(alt_query)
 
-        # split certain version parts with space, e.g. 'openssh 7.4.p1' --> 'openssh 7.4 p1'
+        # split certain version parts with space, e.g. 'openssh 7.4p1' --> 'openssh 7.4 p1'
         pot_alt_query = ''
         cur_char_class = string.ascii_letters
-        did_split = False
+        did_split, seen_first_break = False, False
         splits, maxsplit = 0, query.count(' ') + ALT_QUERY_MAXSPLIT
         for char in query:
             if char in (' ', '.', '-', '+'):
+                seen_first_break = True
                 pot_alt_query += char
                 did_split = False
                 continue
 
-            if splits < maxsplit and char not in cur_char_class and not did_split:
+            if seen_first_break and splits < maxsplit and char not in cur_char_class and not did_split:
                 pot_alt_query += ' '
                 did_split = True
                 splits += 1
