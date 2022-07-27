@@ -463,13 +463,10 @@ def create_cpe_from_base_cpe_and_query(cpe, query):
         if version_str in cpe:
             return None
 
-        # try to find earliest wildcard in cpe and replace it with version from query
+        # always put version into the appropriate, i.e. sixth, CPE field
         cpe_parts = cpe.split(':')
-        for i, part in reversed(list(enumerate(cpe_parts))):
-            if part in ('*', '-'):
-                if not any([front_part in ('*', '-') for front_part in cpe_parts[:i]]):
-                    cpe_parts[i] = version_str
-                    return ':'.join(cpe_parts)
+        cpe_parts[5] = version_str
+        return ':'.join(cpe_parts)
 
     return None
 
