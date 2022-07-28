@@ -471,9 +471,15 @@ def create_cpe_from_base_cpe_and_query(cpe, query):
     return None
 
 
-def create_base_cpe_if_versionless_query(cpe, query):
+def is_versionless_query(query):
     version_str_match = VERSION_MATCH_CPE_CREATION_RE.search(query)
     if not version_str_match:
+        return True
+    return False
+
+
+def create_base_cpe_if_versionless_query(cpe, query):
+    if is_versionless_query(query):
         cpe_parts = cpe.split(':')
         base_cpe = ':'.join(cpe_parts[:5] + ['*'] * 8)
         return base_cpe
