@@ -245,10 +245,20 @@ def _search_cpes(queries_raw, cpe_version, count, threshold, zero_extend_version
                 if threshold > 0 and sim_score < threshold:
                     continue
 
+                cpe_base = ':'.join(cpe.split(':')[:5]) + ':'
                 if sim_score > most_similar[query][0][1]:
                     most_similar[query] = [(cpe, sim_score)] + most_similar[query][:count-1]
-                elif len(most_similar[query]) < count:
+                elif len(most_similar[query]) < count and not most_similar[query][0][0].startswith(cpe_base):
                     most_similar[query].append((cpe, sim_score))
+                elif not most_similar[query][0][0].startswith(cpe_base):
+                    insert_idx = None
+                    for i, (cur_cpe, cur_sim_score) in enumerate(most_similar[query][1:]):
+                        if sim_score > cur_sim_score:
+                            if not cur_cpe.startswith(cpe_base):
+                                insert_idx = i+1
+                            break
+                    if insert_idx:
+                        most_similar[query] = most_similar[query][:insert_idx] + [(cpe, sim_score)] + most_similar[query][insert_idx:-1]
     else:
         # iterate over every CPE, for every query compute similarity scores and keep track of most similar
         with open(CPE_DATA_FILES[cpe_version], "r") as fout:
@@ -272,10 +282,21 @@ def _search_cpes(queries_raw, cpe_version, count, threshold, zero_extend_version
                     if threshold > 0 and sim_score < threshold:
                         continue
 
+                    cpe_base = ':'.join(cpe.split(':')[:5]) + ':'
                     if sim_score > most_similar[query][0][1]:
                         most_similar[query] = [(cpe, sim_score)] + most_similar[query][:count-1]
-                    elif len(most_similar[query]) < count:
+                    elif len(most_similar[query]) < count and not most_similar[query][0][0].startswith(cpe_base):
                         most_similar[query].append((cpe, sim_score))
+                    elif not most_similar[query][0][0].startswith(cpe_base):
+                        insert_idx = None
+                        for i, (cur_cpe, cur_sim_score) in enumerate(most_similar[query][1:]):
+                            if sim_score > cur_sim_score:
+                                if not cur_cpe.startswith(cpe_base):
+                                    insert_idx = i+1
+                                break
+                        if insert_idx:
+                            most_similar[query] = most_similar[query][:insert_idx] + [(cpe, sim_score)] + most_similar[query][insert_idx:-1]
+
 
     # create intermediate results (including any additional queries)
     intermediate_results = {}
