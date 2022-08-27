@@ -77,7 +77,7 @@ def update(cpe_version):
     if not SILENT:
         print("[+] Creating a custom CPE database for future invocations")
     cpe22_infos, cpe23_infos = [], []
-    with open(cpe_dict_filepath) as fin:
+    with open(cpe_dict_filepath,encoding="utf8") as fin:
         content = fin.read()
         cpe_items = CPE_DICT_ITEM_RE.findall(content)
         for cpe_item in cpe_items:
