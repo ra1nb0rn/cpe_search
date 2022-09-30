@@ -28,7 +28,7 @@ TEXT_TO_VECTOR_RE = re.compile(r"[\w+\.]+")
 GET_ALL_CPES_RE = re.compile(r'(.*);.*;.*')
 LOAD_CPE_TFS_MUTEX = threading.Lock()
 VERSION_MATCH_ZE_RE = re.compile(r'\b([\d]+\.?){1,4}\b')
-VERSION_MATCH_CPE_CREATION_RE = re.compile(r'\b([\d]+[\.\-]?){1,4}([a-z][\d]{0,3})?[^\w]*$')
+VERSION_MATCH_CPE_CREATION_RE = re.compile(r'\b((\d+[\.\-]?){1,4}([a-z\d]{0,3})?)[^\w]*$')
 CPE_TFS = []
 TERMS = []
 TERMS_MAP = {}
@@ -480,7 +480,7 @@ def match_cpe23_to_cpe23_from_dict(cpe23_in, keep_data_in_memory=False):
 def create_cpe_from_base_cpe_and_query(cpe, query):
     version_str_match = VERSION_MATCH_CPE_CREATION_RE.search(query)
     if version_str_match:
-        version_str = version_str_match.group(0).strip()
+        version_str = version_str_match.group(1).strip()
         if version_str in cpe:
             return None
 
