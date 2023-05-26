@@ -77,7 +77,7 @@ def update(cpe_version):
     if not SILENT:
         print("[+] Creating a custom CPE database for future invocations")
     cpe22_infos, cpe23_infos = [], []
-    with open(cpe_dict_filepath,encoding="utf8") as fin:
+    with open(cpe_dict_filepath, encoding="utf8") as fin:
         content = fin.read()
         cpe_items = CPE_DICT_ITEM_RE.findall(content)
         for cpe_item in cpe_items:
@@ -481,8 +481,6 @@ def create_cpe_from_base_cpe_and_query(cpe, query):
     version_str_match = VERSION_MATCH_CPE_CREATION_RE.search(query)
     if version_str_match:
         version_str = version_str_match.group(1).strip()
-        if version_str in cpe:
-            return None
 
         # always put version into the appropriate, i.e. sixth, CPE field
         cpe_parts = cpe.split(':')
