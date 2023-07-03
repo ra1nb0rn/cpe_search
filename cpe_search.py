@@ -9,9 +9,11 @@ import re
 import string
 import sys
 import threading
+import requests
 from urllib.parse import unquote
 from urllib.request import urlretrieve
 import zipfile
+from time import sleep
 
 try:  # use ujson if available
     import ujson as json
@@ -20,6 +22,7 @@ except ModuleNotFoundError:
 
 # Constants
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+CPE_API_URL = "https://services.nvd.nist.gov/rest/json/cpes/2.0/"
 CPE_DICT_URL = "https://nvd.nist.gov/feeds/xml/cpe/dictionary/official-cpe-dictionary_v2.3.xml.zip"
 CPE_DATA_FILES = {"2.2": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.2.csv"),
                   "2.3": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.3.csv")}
@@ -35,10 +38,14 @@ TERMS_MAP = {}
 SILENT = True
 ALT_QUERY_MAXSPLIT = 1
 
+RESULTS_PER_PAGE = 10000
+START_INDEX = 0
+
 
 def parse_args():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description="Search for CPEs using software names and titles -- Created by Dustin Born (ra1nb0rn)")
+    parser.add_argument("-b", "--build", action="store_true", help="Build the local CPE database fromn scratch")
     parser.add_argument("-u", "--update", action="store_true", help="Update the local CPE database")
     parser.add_argument("-c", "--count", default=3, type=int, help="The number of CPEs to show in the similarity overview (default: 3)")
     parser.add_argument("-v", "--version", default="2.2", choices=["2.2", "2.3"], help="The CPE version to use: 2.2 or 2.3 (default: 2.2)")
@@ -122,6 +129,40 @@ def update(cpe_version):
     os.remove(dst)
     os.remove(os.path.join(SCRIPT_DIR, cpe_dict_name))
 
+def build(cpe_version):
+    '''Pulls current CPE data via the CPE API for an initial database build'''
+    if not SILENT:
+        print("[+] Getting NVD's official CPE data (might take some time)")
+    offset = START_INDEX
+    # initial first request, also to set parameters
+    params = {'resultsPerPage': RESULTS_PER_PAGE, 'startIndex': offset}
+    cpe_api_data_page = requests.get(url=CPE_API_URL,params=params)
+    offset += RESULTS_PER_PAGE
+    numTotalResults = cpe_api_data_page.json().get('totalResults')
+    page_num = 0
+    while(offset <= numTotalResults):
+        try:
+            cpe_api_data_page = requests.get(url=CPE_API_URL,params=params)
+        except requests.exceptions.Timeout:
+            print(f"[!] The request timed out in iteration {page_num}.")
+        except requests.exceptions.TooManyRedirects:
+            print("[!] The provided base URL might be faulty (too many redirects).")
+        except requests.exceptions.InvalidURL:
+            print("[!] The base URL provided in the script is invalid, please consider updating the CPE API base URL.")
+        except requests.exceptions.RequestException as e:
+            print(f"[!] Some unknown Exception occured:\n{e}")
+        page_num += 1
+        with open(f"cpe_data_{page_num}.txt", "w") as datafile:
+            products = cpe_api_data_page.json().get('products')
+            for product in products:
+                datafile.write(json.dumps(product))
+            datafile.close()
+        offset += RESULTS_PER_PAGE 
+        sleep(6)
+
+# def update(cpe_version):
+#     '''Pulls current CPE data via the CPE API database update taking in account date ranges'''
+#     pass
 
 def _get_alternative_queries(init_queries, zero_extend_versions=False):
     alt_queries_mapping = {}
