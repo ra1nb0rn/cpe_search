@@ -27,6 +27,8 @@ CPE_DICT_URL = "https://nvd.nist.gov/feeds/xml/cpe/dictionary/official-cpe-dicti
 CPE_DATA_FILES = {"2.2": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.2.csv"),
                   "2.3": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.3.csv")}
 CPE_DICT_ITEM_RE = re.compile(r"<cpe-item name=\"([^\"]*)\">.*?<title xml:lang=\"en-US\"[^>]*>([^<]*)</title>.*?<cpe-23:cpe23-item name=\"([^\"]*)\"", flags=re.DOTALL)
+CPE_TITLE_RE = re.compile(r";(.*?);")
+CPE_NAME_RE = re.compile(r"^[^;]*")
 TEXT_TO_VECTOR_RE = re.compile(r"[\w+\.]+")
 GET_ALL_CPES_RE = re.compile(r'(.*);.*;.*')
 LOAD_CPE_TFS_MUTEX = threading.Lock()
@@ -45,7 +47,7 @@ START_INDEX = 0
 def parse_args():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description="Search for CPEs using software names and titles -- Created by Dustin Born (ra1nb0rn)")
-    parser.add_argument("-b", "--build", action="store_true", help="Build the local CPE database fromn scratch")
+    parser.add_argument("-b", "--build", action="store_true", help="Build the local CPE database from scratch")
     parser.add_argument("-u", "--update", action="store_true", help="Update the local CPE database")
     parser.add_argument("-c", "--count", default=3, type=int, help="The number of CPEs to show in the similarity overview (default: 3)")
     parser.add_argument("-v", "--version", default="2.2", choices=["2.2", "2.3"], help="The CPE version to use: 2.2 or 2.3 (default: 2.2)")
@@ -61,75 +63,7 @@ def set_silent(silent):
     global SILENT
     SILENT = silent
 
-
 def update(cpe_version):
-    """Update locally stored CPE information"""
-
-    # download dictionary
-    if not SILENT:
-        print("[+] Downloading NVD's official CPE dictionary (might take some time)")
-    src = CPE_DICT_URL
-    dst = os.path.join(SCRIPT_DIR, src.rsplit("/", 1)[1])
-    urlretrieve(CPE_DICT_URL, dst)
-
-    # unzip CPE dictionary
-    if not SILENT:
-        print("[+] Unzipping dictionary")
-    with zipfile.ZipFile(dst,"r") as zip_ref:
-        cpe_dict_name = zip_ref.namelist()[0]
-        cpe_dict_filepath = os.path.join(SCRIPT_DIR, cpe_dict_name)
-        zip_ref.extractall(SCRIPT_DIR)
-
-    # build custom CPE database, additionally containing term frequencies and normalization factors
-    if not SILENT:
-        print("[+] Creating a custom CPE database for future invocations")
-    cpe22_infos, cpe23_infos = [], []
-    with open(cpe_dict_filepath, encoding="utf8") as fin:
-        content = fin.read()
-        cpe_items = CPE_DICT_ITEM_RE.findall(content)
-        for cpe_item in cpe_items:
-            cpe22, cpe_name, cpe23 = cpe_item[0].lower(), cpe_item[1].lower(), cpe_item[-1].lower()
-
-            for i, cpe in enumerate((cpe22, cpe23)):
-                if "%" in cpe:
-                    cpe = unquote(cpe)
-                cpe_mod = cpe.replace("_", ":")
-
-                if i == 0:
-                    cpe_elems = cpe_mod[7:].split(":")
-                else:
-                    cpe_elems = cpe_mod[10:].split(":")
-
-                cpe_name_elems = cpe_name.split()
-                words = TEXT_TO_VECTOR_RE.findall(" ".join(cpe_elems + cpe_name_elems))
-                cpe_tf = Counter(words)
-                for term, tf in cpe_tf.items():
-                    cpe_tf[term] = tf / len(cpe_tf)
-                cpe_abs = math.sqrt(sum([cnt**2 for cnt in cpe_tf.values()]))
-
-                cpe_info = (cpe, cpe_tf, cpe_abs)
-                if i == 0:
-                    cpe22_infos.append(cpe_info)
-                else:
-                    cpe23_infos.append(cpe_info)
-
-    # store customly built CPE database
-    if cpe_version == "2.2":
-        with open(CPE_DATA_FILES["2.2"], "w") as fout:
-            for cpe, cpe_tf, cpe_abs in cpe22_infos:
-                fout.write('%s;%s;%f\n' % (cpe, json.dumps(cpe_tf), cpe_abs))
-    else:
-        with open(CPE_DATA_FILES["2.3"], "w") as fout:
-            for cpe, cpe_tf, cpe_abs in cpe23_infos:
-                fout.write('%s;%s;%f\n' % (cpe, json.dumps(cpe_tf), cpe_abs))
-
-    # clean up
-    if not SILENT:
-        print("[+] Cleaning up")
-    os.remove(dst)
-    os.remove(os.path.join(SCRIPT_DIR, cpe_dict_name))
-
-def build(cpe_version):
     '''Pulls current CPE data via the CPE API for an initial database build'''
     if not SILENT:
         print("[+] Getting NVD's official CPE data (might take some time)")
@@ -140,6 +74,7 @@ def build(cpe_version):
     offset += RESULTS_PER_PAGE
     numTotalResults = cpe_api_data_page.json().get('totalResults')
     page_num = 0
+    respfile = f"{CPE_DATA_FILES[cpe_version]}_workfile"
     while(offset <= numTotalResults):
         try:
             cpe_api_data_page = requests.get(url=CPE_API_URL,params=params)
@@ -152,13 +87,37 @@ def build(cpe_version):
         except requests.exceptions.RequestException as e:
             print(f"[!] Some unknown Exception occured:\n{e}")
         page_num += 1
-        with open(f"cpe_data_{page_num}.txt", "w") as datafile:
+        with open(respfile, "a") as intermediate_file:
             products = cpe_api_data_page.json().get('products')
             for product in products:
-                datafile.write(json.dumps(product))
-            datafile.close()
+                extracted_title = ""
+                cpe_name = product['cpe']['cpeName']
+                for title in product['cpe']['titles']:
+                    if title['lang'] == 'en':
+                        extracted_title = title['title']
+                    else:
+                        pass
+                intermediate_file.write('%s;%s;\n' % (cpe_name, extracted_title))
+            intermediate_file.close()
         offset += RESULTS_PER_PAGE 
         sleep(6)
+    cpe_items = []
+    with open(respfile, encoding="utf8") as fin:
+        for line in fin:
+            cpe_name = line.split(';')[0]
+            cpe_title = line.split(';')[1]
+            cpe_title_elems = cpe_title.split()
+            words = TEXT_TO_VECTOR_RE.findall(" ".join(cpe_title_elems)) #cpe_elems???
+            cpe_tf = Counter(words)
+            for term, tf in cpe_tf.items():
+                cpe_tf[term] = tf / len(cpe_tf)
+            cpe_abs = math.sqrt(sum([cnt**2 for cnt in cpe_tf.values()]))
+            cpe_info = (cpe_name, cpe_tf, cpe_abs)
+            cpe_items.append(cpe_info)
+        fin.close()
+    with open(CPE_DATA_FILES[cpe_version], "w") as outfile:
+        for cpe_name, cpe_tf, cpe_abs in cpe_items:
+            outfile.write('%s;%s;%f\n' % (cpe_name, json.dumps(cpe_tf), cpe_abs))
 
 # def update(cpe_version):
 #     '''Pulls current CPE data via the CPE API database update taking in account date ranges'''
