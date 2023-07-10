@@ -13,7 +13,11 @@ import requests
 from urllib.parse import unquote
 from urllib.request import urlretrieve
 import zipfile
+import asyncio
+import aiohttp
 from time import sleep
+from datetime import datetime, timedelta
+from collections import deque
 
 try:  # use ujson if available
     import ujson as json
@@ -21,6 +25,7 @@ except ModuleNotFoundError:
     import json
 
 # Constants
+NVD_API_KEY = os.getenv('NVD_API_KEY')
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CPE_API_URL = "https://services.nvd.nist.gov/rest/json/cpes/2.0/"
 CPE_DICT_URL = "https://nvd.nist.gov/feeds/xml/cpe/dictionary/official-cpe-dictionary_v2.3.xml.zip"
@@ -39,6 +44,12 @@ TERMS = []
 TERMS_MAP = {}
 SILENT = True
 ALT_QUERY_MAXSPLIT = 1
+
+LOGFILE = os.path.join(SCRIPT_DIR,"timestamp_logs.txt")
+
+REQUEST_TIMES = deque()
+MAX_REQUESTS = 50
+WINDOW_DURATION = timedelta(seconds=30)
 
 RESULTS_PER_PAGE = 10000
 START_INDEX = 0
@@ -63,51 +74,75 @@ def set_silent(silent):
     global SILENT
     SILENT = silent
 
-def update(cpe_version):
+async def update(headers, params):
+    while len(REQUEST_TIMES) >= MAX_REQUESTS:
+        elapsed_time = datetime.now() - REQUEST_TIMES[0]
+        if elapsed_time < WINDOW_DURATION:
+            await asyncio.sleep((WINDOW_DURATION - elapsed_time).total_seconds())
+        else:
+            REQUEST_TIMES.popleft()
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url=CPE_API_URL, headers=headers, params=params) as cpe_api_data_response:
+            request_timestamp = datetime.now()
+            REQUEST_TIMES.append(request_timestamp)
+            with open(LOGFILE, "a") as lf:
+                lf.write(str(request_timestamp) + '\n')
+                lf.close()
+            if cpe_api_data_response.status == 200:
+                return await cpe_api_data_response.json()
+            else:
+                return None 
+                #TODO: implement exception handling
+
+async def execute_update(cpe_version):
     '''Pulls current CPE data via the CPE API for an initial database build'''
     if not SILENT:
         print("[+] Getting NVD's official CPE data (might take some time)")
-    offset = START_INDEX
+        offset = START_INDEX
+
     # initial first request, also to set parameters
     params = {'resultsPerPage': RESULTS_PER_PAGE, 'startIndex': offset}
-    cpe_api_data_page = requests.get(url=CPE_API_URL,params=params)
-    offset += RESULTS_PER_PAGE
-    numTotalResults = cpe_api_data_page.json().get('totalResults')
-    page_num = 0
-    respfile = f"{CPE_DATA_FILES[cpe_version]}_workfile"
+    headers = {'apiKey': NVD_API_KEY}#, 'Content-Type': 'application/json'}
+    cpe_api_data_page = requests.get(url=CPE_API_URL,headers=headers,params=params)
+    numTotalResults = 20000#cpe_api_data_page.json().get('totalResults')
+    tasks = []
+
+    # make necessary amount of requests
     while(offset <= numTotalResults):
-        try:
-            cpe_api_data_page = requests.get(url=CPE_API_URL,params=params)
-        except requests.exceptions.Timeout:
-            print(f"[!] The request timed out in iteration {page_num}.")
-        except requests.exceptions.TooManyRedirects:
-            print("[!] The provided base URL might be faulty (too many redirects).")
-        except requests.exceptions.InvalidURL:
-            print("[!] The base URL provided in the script is invalid, please consider updating the CPE API base URL.")
-        except requests.exceptions.RequestException as e:
-            print(f"[!] Some unknown Exception occured:\n{e}")
-        page_num += 1
-        with open(respfile, "a") as intermediate_file:
-            products = cpe_api_data_page.json().get('products')
-            for product in products:
-                extracted_title = ""
-                cpe_name = product['cpe']['cpeName']
-                for title in product['cpe']['titles']:
-                    if title['lang'] == 'en':
-                        extracted_title = title['title']
-                    else:
-                        pass
-                intermediate_file.write('%s;%s;\n' % (cpe_name, extracted_title))
-            intermediate_file.close()
-        offset += RESULTS_PER_PAGE 
-        sleep(6)
+        for _ in range(MAX_REQUESTS):
+            if offset <= numTotalResults:
+                task = asyncio.create_task(update(headers=headers, params=params))
+                tasks.append(task)
+                offset += RESULTS_PER_PAGE
+            else: 
+                break
+    
+    cpe_api_data_responses = await asyncio.gather(*tasks)
+
+    # processing
+    respfile = f"{CPE_DATA_FILES[cpe_version]}_workfile"
+    with open(respfile, "a") as intermediate_file:
+        for cpe_api_data_response in cpe_api_data_responses:
+                products = cpe_api_data_response.get('products')
+                for product in products:
+                    extracted_title = ""
+                    cpe_name = product['cpe']['cpeName']
+                    for title in product['cpe']['titles']:
+                        if title['lang'] == 'en':
+                            extracted_title = title['title']
+                        else:
+                            pass
+                    intermediate_file.write('%s;%s;\n' % (cpe_name, extracted_title))
+    intermediate_file.close()
+
     cpe_items = []
     with open(respfile, encoding="utf8") as fin:
         for line in fin:
             cpe_name = line.split(';')[0]
             cpe_title = line.split(';')[1]
-            cpe_title_elems = cpe_title.split()
-            words = TEXT_TO_VECTOR_RE.findall(" ".join(cpe_title_elems)) #cpe_elems???
+            cpe_title_elems = [x.lower() for x in cpe_title.split()[1:]]
+            cpe_elems = cpe_name.split(':')[3:]
+            words = TEXT_TO_VECTOR_RE.findall(" ".join(cpe_elems + cpe_title_elems))
             cpe_tf = Counter(words)
             for term, tf in cpe_tf.items():
                 cpe_tf[term] = tf / len(cpe_tf)
@@ -115,9 +150,16 @@ def update(cpe_version):
             cpe_info = (cpe_name, cpe_tf, cpe_abs)
             cpe_items.append(cpe_info)
         fin.close()
-    with open(CPE_DATA_FILES[cpe_version], "w") as outfile:
-        for cpe_name, cpe_tf, cpe_abs in cpe_items:
-            outfile.write('%s;%s;%f\n' % (cpe_name, json.dumps(cpe_tf), cpe_abs))
+
+    # store customly built CPE database
+    if cpe_version == "2.2":
+        with open(CPE_DATA_FILES["2.2"], "w") as fout:
+            for cpe, cpe_tf, cpe_abs in cpe22_infos:
+                fout.write('%s;%s;%f\n' % (cpe, json.dumps(cpe_tf), cpe_abs))
+    else:
+        with open(CPE_DATA_FILES["2.3"], "w") as fout:
+            for cpe, cpe_tf, cpe_abs in cpe23_infos:
+                fout.write('%s;%s;%f\n' % (cpe, json.dumps(cpe_tf), cpe_abs))
 
 # def update(cpe_version):
 #     '''Pulls current CPE data via the CPE API database update taking in account date ranges'''
@@ -530,13 +572,14 @@ def search_cpes(queries, cpe_version="2.3", count=3, threshold=-1, zero_extend_v
 if __name__ == "__main__":
     SILENT = not sys.stdout.isatty()
     args = parse_args()
+    loop = asyncio.get_event_loop()
     if args.update:
-        update(args.version)
+        loop.run_until_complete(execute_update(args.version))
 
     if args.queries and not os.path.isfile(CPE_DATA_FILES[args.version]):
         if not SILENT:
             print("[+] Running initial setup (might take a couple of minutes)", file=sys.stderr)
-        update(args.version)
+        loop.run_until_complete(execute_update(args.version))
 
     if args.queries:
         results = search_cpes(args.queries, args.version, args.count)
