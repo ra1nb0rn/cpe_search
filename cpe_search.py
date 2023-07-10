@@ -26,6 +26,8 @@ except ModuleNotFoundError:
 
 # Constants
 NVD_API_KEY = os.getenv('NVD_API_KEY')
+if NVD_API_KEY is None:
+    print("API KEY NOT FOUND!")
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CPE_API_URL = "https://services.nvd.nist.gov/rest/json/cpes/2.0/"
 CPE_DICT_URL = "https://nvd.nist.gov/feeds/xml/cpe/dictionary/official-cpe-dictionary_v2.3.xml.zip"
@@ -48,7 +50,7 @@ ALT_QUERY_MAXSPLIT = 1
 LOGFILE = os.path.join(SCRIPT_DIR,"timestamp_logs.txt")
 
 REQUEST_TIMES = deque()
-MAX_REQUESTS = 50
+MAX_REQUESTS = 5
 WINDOW_DURATION = timedelta(seconds=30)
 
 RESULTS_PER_PAGE = 10000
@@ -74,44 +76,51 @@ def set_silent(silent):
     global SILENT
     SILENT = silent
 
-async def update(headers, params):
+async def update(headers, params, requestno):
     while len(REQUEST_TIMES) >= MAX_REQUESTS:
         elapsed_time = datetime.now() - REQUEST_TIMES[0]
         if elapsed_time < WINDOW_DURATION:
             await asyncio.sleep((WINDOW_DURATION - elapsed_time).total_seconds())
         else:
             REQUEST_TIMES.popleft()
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url=CPE_API_URL, headers=headers, params=params) as cpe_api_data_response:
-            request_timestamp = datetime.now()
-            REQUEST_TIMES.append(request_timestamp)
-            with open(LOGFILE, "a") as lf:
-                lf.write(str(request_timestamp) + '\n')
-                lf.close()
-            if cpe_api_data_response.status == 200:
-                return await cpe_api_data_response.json()
-            else:
-                return None 
-                #TODO: implement exception handling
-
+    retry_limit = 3
+    retry_interval = 6
+    for i in range(retry_limit + 1):
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url=CPE_API_URL, headers=headers, params=params) as cpe_api_data_response:
+                request_timestamp = datetime.now()
+                REQUEST_TIMES.append(request_timestamp)
+                with open(LOGFILE, "a") as lf:
+                    lf.write(str(request_timestamp) + f"--- Retry attempt {i-1}" + '\n')
+                    lf.close()
+                if cpe_api_data_response.status == 200:
+                    return await cpe_api_data_response.json()
+                else:
+                    print(f"[-] Received status code {cpe_api_data_response.status} on request {requestno} Retrying...")
+        await asyncio.sleep(retry_interval)
 async def execute_update(cpe_version):
     '''Pulls current CPE data via the CPE API for an initial database build'''
     if not SILENT:
         print("[+] Getting NVD's official CPE data (might take some time)")
-        offset = START_INDEX
+    
+    offset = START_INDEX
 
     # initial first request, also to set parameters
     params = {'resultsPerPage': RESULTS_PER_PAGE, 'startIndex': offset}
-    headers = {'apiKey': NVD_API_KEY}#, 'Content-Type': 'application/json'}
+    headers = {'apiKey': NVD_API_KEY}
+    #TODO: Check if none
     cpe_api_data_page = requests.get(url=CPE_API_URL,headers=headers,params=params)
-    numTotalResults = 20000#cpe_api_data_page.json().get('totalResults')
+    numTotalResults = cpe_api_data_page.json().get('totalResults')
     tasks = []
 
     # make necessary amount of requests
     while(offset <= numTotalResults):
+        requestno = 0
         for _ in range(MAX_REQUESTS):
             if offset <= numTotalResults:
-                task = asyncio.create_task(update(headers=headers, params=params))
+                requestno += 1
+                params = {'resultsPerPage': RESULTS_PER_PAGE, 'startIndex': offset}
+                task = asyncio.gather(update(headers=headers, params=params, requestno = requestno))
                 tasks.append(task)
                 offset += RESULTS_PER_PAGE
             else: 
@@ -119,11 +128,11 @@ async def execute_update(cpe_version):
     
     cpe_api_data_responses = await asyncio.gather(*tasks)
 
-    # processing
+    print("[+] Doing intermediate processing.")
     respfile = f"{CPE_DATA_FILES[cpe_version]}_workfile"
     with open(respfile, "a") as intermediate_file:
         for cpe_api_data_response in cpe_api_data_responses:
-                products = cpe_api_data_response.get('products')
+                products = cpe_api_data_response[0].get('products')
                 for product in products:
                     extracted_title = ""
                     cpe_name = product['cpe']['cpeName']
@@ -135,6 +144,7 @@ async def execute_update(cpe_version):
                     intermediate_file.write('%s;%s;\n' % (cpe_name, extracted_title))
     intermediate_file.close()
 
+    print("[+] Moving on to doing calculations.")
     cpe_items = []
     with open(respfile, encoding="utf8") as fin:
         for line in fin:
@@ -151,15 +161,9 @@ async def execute_update(cpe_version):
             cpe_items.append(cpe_info)
         fin.close()
 
-    # store customly built CPE database
-    if cpe_version == "2.2":
-        with open(CPE_DATA_FILES["2.2"], "w") as fout:
-            for cpe, cpe_tf, cpe_abs in cpe22_infos:
-                fout.write('%s;%s;%f\n' % (cpe, json.dumps(cpe_tf), cpe_abs))
-    else:
-        with open(CPE_DATA_FILES["2.3"], "w") as fout:
-            for cpe, cpe_tf, cpe_abs in cpe23_infos:
-                fout.write('%s;%s;%f\n' % (cpe, json.dumps(cpe_tf), cpe_abs))
+    with open(CPE_DATA_FILES[cpe_version], "w") as outfile:
+        for cpe_name, cpe_tf, cpe_abs in cpe_items:
+            outfile.write('%s;%s;%f\n' % (cpe_name, json.dumps(cpe_tf), cpe_abs))
 
 # def update(cpe_version):
 #     '''Pulls current CPE data via the CPE API database update taking in account date ranges'''
