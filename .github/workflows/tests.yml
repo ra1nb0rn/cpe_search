@@ -12,7 +12,16 @@ jobs:
         uses: actions/checkout@v3
       - name: Update
         run: sudo apt-get update
+      - name: Set up Python 3.7
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.7
+          cache: 'pip'
+      - name: Install Dependencies
+        run: pip install --user -r requirements.txt
       - name: Get CPEs
-        run: sudo ./cpe_search.py -u -v 2.3
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: sudo python3 cpe_search.py -u -v 2.3
       - name: Testing
         run: sudo ./test.py
