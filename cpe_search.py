@@ -140,10 +140,10 @@ async def update(cpe_version):
     cpe_items = []
     with open(respfile, encoding="utf8") as fin:
         for line in fin:
-            cpe_name = line.split(';')[0]
-            cpe_title = line.split(';')[1]
-            cpe_title_elems = [x.lower() for x in cpe_title.split()[1:]]
-            cpe_elems = cpe_name.split(':')[3:]
+            cpe_mod = line.split(';')[0].replace("_", ":").replace("*", "").replace("\\", "")
+            cpe_title = line.split(';')[1].lower()
+            cpe_title_elems = [x for x in cpe_title.split()]
+            cpe_elems = [x for x in cpe_mod[10:].split(':') if x != ""]
             words = TEXT_TO_VECTOR_RE.findall(" ".join(cpe_elems + cpe_title_elems))
             cpe_tf = Counter(words)
             for term, tf in cpe_tf.items():
