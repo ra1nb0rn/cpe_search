@@ -15,6 +15,7 @@ from urllib.request import urlretrieve
 import zipfile
 import asyncio
 import aiohttp
+from aiolimiter import AsyncLimiter
 from time import sleep
 from datetime import datetime, timedelta
 from collections import deque
@@ -49,9 +50,10 @@ ALT_QUERY_MAXSPLIT = 1
 
 LOGFILE = os.path.join(SCRIPT_DIR,"timestamp_logs.txt")
 
-REQUEST_TIMES = deque()
-MAX_REQUESTS = 5
+MAX_WORKERS = 50
 WINDOW_DURATION = timedelta(seconds=30)
+
+RATE_LIMIT = AsyncLimiter(10.0, 30.0)
 
 RESULTS_PER_PAGE = 10000
 START_INDEX = 0
@@ -76,63 +78,53 @@ def set_silent(silent):
     global SILENT
     SILENT = silent
 
-async def update(headers, params, requestno):
-    while len(REQUEST_TIMES) >= MAX_REQUESTS:
-        elapsed_time = datetime.now() - REQUEST_TIMES[0]
-        if elapsed_time < WINDOW_DURATION:
-            await asyncio.sleep((WINDOW_DURATION - elapsed_time).total_seconds())
-        else:
-            REQUEST_TIMES.popleft()
+async def api_request(session, headers, params, requestno):
     retry_limit = 3
     retry_interval = 6
     for i in range(retry_limit + 1):
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url=CPE_API_URL, headers=headers, params=params) as cpe_api_data_response:
-                request_timestamp = datetime.now()
-                REQUEST_TIMES.append(request_timestamp)
-                with open(LOGFILE, "a") as lf:
-                    lf.write(str(request_timestamp) + f"--- Retry attempt {i-1}" + '\n')
-                    lf.close()
-                if cpe_api_data_response.status == 200:
-                    return await cpe_api_data_response.json()
-                else:
-                    print(f"[-] Received status code {cpe_api_data_response.status} on request {requestno} Retrying...")
-        await asyncio.sleep(retry_interval)
-async def execute_update(cpe_version):
+        async with RATE_LIMIT:
+            cpe_api_data_response = await session.get(url=CPE_API_URL, headers=headers, params=params)
+            request_timestamp = datetime.now()
+            with open(LOGFILE, "a") as lf:
+                lf.write(str(request_timestamp) + f"--- Retry attempt {i-1}" + '\n')
+                lf.close()
+            if cpe_api_data_response.status == 200:
+                print(f"[+] Successfully received data from request {requestno}.")
+                return await cpe_api_data_response.json()
+            else:
+                print(f"[-] Received status code {cpe_api_data_response.status} on request {requestno} Retrying...")
+            await asyncio.sleep(retry_interval)
+
+async def update(cpe_version):
     '''Pulls current CPE data via the CPE API for an initial database build'''
     if not SILENT:
         print("[+] Getting NVD's official CPE data (might take some time)")
     
     offset = START_INDEX
 
-    # initial first request, also to set parameters
+    # initial first request, also to set parameters  #TODO: Check if none
     params = {'resultsPerPage': RESULTS_PER_PAGE, 'startIndex': offset}
     headers = {'apiKey': NVD_API_KEY}
-    #TODO: Check if none
     cpe_api_data_page = requests.get(url=CPE_API_URL,headers=headers,params=params)
     numTotalResults = cpe_api_data_page.json().get('totalResults')
     tasks = []
 
     # make necessary amount of requests
-    while(offset <= numTotalResults):
+    async with aiohttp.ClientSession() as session:
         requestno = 0
-        for _ in range(MAX_REQUESTS):
-            if offset <= numTotalResults:
-                requestno += 1
-                params = {'resultsPerPage': RESULTS_PER_PAGE, 'startIndex': offset}
-                task = asyncio.gather(update(headers=headers, params=params, requestno = requestno))
-                tasks.append(task)
-                offset += RESULTS_PER_PAGE
-            else: 
-                break
-    
-    cpe_api_data_responses = await asyncio.gather(*tasks)
+        while(offset <= numTotalResults):
+            requestno += 1
+            params = {'resultsPerPage': RESULTS_PER_PAGE, 'startIndex': offset}
+            task = asyncio.ensure_future(api_request(session=session, headers=headers, params=params, requestno = requestno))
+            tasks.append(task)
+            offset += RESULTS_PER_PAGE
+        cpe_api_data_responses = await asyncio.gather(*tasks)
 
     print("[+] Doing intermediate processing.")
     respfile = f"{CPE_DATA_FILES[cpe_version]}_workfile"
     with open(respfile, "a") as intermediate_file:
         for cpe_api_data_response in cpe_api_data_responses:
-                products = cpe_api_data_response[0].get('products')
+                products = cpe_api_data_response.get('products')
                 for product in products:
                     extracted_title = ""
                     cpe_name = product['cpe']['cpeName']
@@ -578,12 +570,12 @@ if __name__ == "__main__":
     args = parse_args()
     loop = asyncio.get_event_loop()
     if args.update:
-        loop.run_until_complete(execute_update(args.version))
+        loop.run_until_complete(update(args.version))
 
     if args.queries and not os.path.isfile(CPE_DATA_FILES[args.version]):
         if not SILENT:
             print("[+] Running initial setup (might take a couple of minutes)", file=sys.stderr)
-        loop.run_until_complete(execute_update(args.version))
+        loop.run_until_complete(update(args.version))
 
     if args.queries:
         results = search_cpes(args.queries, args.version, args.count)

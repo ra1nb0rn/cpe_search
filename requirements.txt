@@ -1,3 +1,4 @@
 ujson
 aiohttp
+aiolimiter
 requests
