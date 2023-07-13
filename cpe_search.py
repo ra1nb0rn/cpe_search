@@ -50,10 +50,7 @@ ALT_QUERY_MAXSPLIT = 1
 
 LOGFILE = os.path.join(SCRIPT_DIR,"timestamp_logs.txt")
 
-MAX_WORKERS = 50
-WINDOW_DURATION = timedelta(seconds=30)
-
-RATE_LIMIT = AsyncLimiter(10.0, 30.0)
+RATE_LIMIT = AsyncLimiter(30.0, 30.0)
 
 RESULTS_PER_PAGE = 10000
 START_INDEX = 0
@@ -78,22 +75,23 @@ def set_silent(silent):
     global SILENT
     SILENT = silent
 
-async def api_request(session, headers, params, requestno):
+async def api_request(headers, params, requestno):
     retry_limit = 3
     retry_interval = 6
     for i in range(retry_limit + 1):
         async with RATE_LIMIT:
-            cpe_api_data_response = await session.get(url=CPE_API_URL, headers=headers, params=params)
-            request_timestamp = datetime.now()
-            with open(LOGFILE, "a") as lf:
-                lf.write(str(request_timestamp) + f"--- Retry attempt {i-1}" + '\n')
-                lf.close()
-            if cpe_api_data_response.status == 200:
-                print(f"[+] Successfully received data from request {requestno}.")
-                return await cpe_api_data_response.json()
-            else:
-                print(f"[-] Received status code {cpe_api_data_response.status} on request {requestno} Retrying...")
-            await asyncio.sleep(retry_interval)
+            async with aiohttp.ClientSession() as session:
+                cpe_api_data_response = await session.get(url=CPE_API_URL, headers=headers, params=params)
+                request_timestamp = datetime.now()
+                with open(LOGFILE, "a") as lf:
+                    lf.write(str(request_timestamp) + f"--- Retry attempt {i-1}" + '\n')
+                    lf.close()
+                if cpe_api_data_response.status == 200:
+                    print(f"[+] Successfully received data from request {requestno}.")
+                    return await cpe_api_data_response.json()
+                else:
+                    print(f"[-] Received status code {cpe_api_data_response.status} on request {requestno} Retrying...")
+                await asyncio.sleep(retry_interval)
 
 async def update(cpe_version):
     '''Pulls current CPE data via the CPE API for an initial database build'''
@@ -110,15 +108,14 @@ async def update(cpe_version):
     tasks = []
 
     # make necessary amount of requests
-    async with aiohttp.ClientSession() as session:
-        requestno = 0
-        while(offset <= numTotalResults):
-            requestno += 1
-            params = {'resultsPerPage': RESULTS_PER_PAGE, 'startIndex': offset}
-            task = asyncio.ensure_future(api_request(session=session, headers=headers, params=params, requestno = requestno))
-            tasks.append(task)
-            offset += RESULTS_PER_PAGE
-        cpe_api_data_responses = await asyncio.gather(*tasks)
+    requestno = 0
+    while(offset <= numTotalResults):
+        requestno += 1
+        params = {'resultsPerPage': RESULTS_PER_PAGE, 'startIndex': offset}
+        task = asyncio.ensure_future(api_request(headers=headers, params=params, requestno = requestno))
+        tasks.append(task)
+        offset += RESULTS_PER_PAGE
+    cpe_api_data_responses = await asyncio.gather(*tasks)
 
     print("[+] Doing intermediate processing.")
     respfile = f"{CPE_DATA_FILES[cpe_version]}_workfile"
@@ -140,7 +137,7 @@ async def update(cpe_version):
     cpe_items = []
     with open(respfile, encoding="utf8") as fin:
         for line in fin:
-            cpe_mod = line.split(';')[0].replace("_", ":").replace("*", "").replace("\\", "")
+            cpe_mod = line.strip('\n').split(';')[0].replace("_", ":").replace("*", "").replace("\\", "")
             cpe_title = line.split(';')[1].lower()
             cpe_title_elems = [x for x in cpe_title.split()]
             cpe_elems = [x for x in cpe_mod[10:].split(':') if x != ""]
@@ -149,13 +146,15 @@ async def update(cpe_version):
             for term, tf in cpe_tf.items():
                 cpe_tf[term] = tf / len(cpe_tf)
             cpe_abs = math.sqrt(sum([cnt**2 for cnt in cpe_tf.values()]))
-            cpe_info = (cpe_name, cpe_tf, cpe_abs)
+            cpe_info = (line.split(';')[0].lower(), cpe_tf, cpe_abs)
             cpe_items.append(cpe_info)
         fin.close()
 
+    os.remove(respfile)
+
     with open(CPE_DATA_FILES[cpe_version], "w") as outfile:
-        for cpe_name, cpe_tf, cpe_abs in cpe_items:
-            outfile.write('%s;%s;%f\n' % (cpe_name, json.dumps(cpe_tf), cpe_abs))
+        for name, cpe_tf, cpe_abs in cpe_items:
+            outfile.write('%s;%s;%f\n' % (name, json.dumps(cpe_tf), cpe_abs))
 
 # def update(cpe_version):
 #     '''Pulls current CPE data via the CPE API database update taking in account date ranges'''
