@@ -27,11 +27,8 @@ except ModuleNotFoundError:
 
 # Constants
 NVD_API_KEY = os.getenv('NVD_API_KEY')
-if NVD_API_KEY is None:
-    print("API KEY NOT FOUND!")
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CPE_API_URL = "https://services.nvd.nist.gov/rest/json/cpes/2.0/"
-CPE_DICT_URL = "https://nvd.nist.gov/feeds/xml/cpe/dictionary/official-cpe-dictionary_v2.3.xml.zip"
 CPE_DATA_FILES = {"2.2": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.2.csv"),
                   "2.3": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.3.csv")}
 CPE_DICT_ITEM_RE = re.compile(r"<cpe-item name=\"([^\"]*)\">.*?<title xml:lang=\"en-US\"[^>]*>([^<]*)</title>.*?<cpe-23:cpe23-item name=\"([^\"]*)\"", flags=re.DOTALL)
@@ -45,16 +42,15 @@ VERSION_MATCH_CPE_CREATION_RE = re.compile(r'\b((\d+[\.\-]?){1,4}([a-z\d]{0,3})?
 CPE_TFS = []
 TERMS = []
 TERMS_MAP = {}
-SILENT = True
+SILENT = False
 ALT_QUERY_MAXSPLIT = 1
 
-LOGFILE = os.path.join(SCRIPT_DIR,"timestamp_logs.txt")
-
-RATE_LIMIT = AsyncLimiter(30.0, 30.0)
+RATE_LIMIT = AsyncLimiter(25.0, 30.0)
 
 RESULTS_PER_PAGE = 10000
 START_INDEX = 0
 
+DEBUG = True
 
 def parse_args():
     """Parse command line arguments"""
@@ -79,19 +75,62 @@ async def api_request(headers, params, requestno):
     retry_limit = 3
     retry_interval = 6
     for i in range(retry_limit + 1):
-        async with RATE_LIMIT:
             async with aiohttp.ClientSession() as session:
                 cpe_api_data_response = await session.get(url=CPE_API_URL, headers=headers, params=params)
-                request_timestamp = datetime.now()
-                with open(LOGFILE, "a") as lf:
-                    lf.write(str(request_timestamp) + f"--- Retry attempt {i-1}" + '\n')
-                    lf.close()
                 if cpe_api_data_response.status == 200:
-                    print(f"[+] Successfully received data from request {requestno}.")
+                    if DEBUG:
+                        print(f"[+] Successfully received data from request {requestno}.")
                     return await cpe_api_data_response.json()
                 else:
-                    print(f"[-] Received status code {cpe_api_data_response.status} on request {requestno} Retrying...")
+                    if not SILENT:
+                        print(f"[-] Received status code {cpe_api_data_response.status} on request {requestno} Retrying...")
                 await asyncio.sleep(retry_interval)
+
+def intermediate_process(api_data, requestno):
+    '''Performs extraction of CPE names and CPE titles'''
+    if not SILENT and DEBUG:
+        print(f"[+] Intermediate processing on request number {requestno}")
+    products = api_data.get('products')
+    cpes = []
+    for product in products:
+        extracted_title = ""
+        cpe_name = product['cpe']['cpeName']
+        for title in product['cpe']['titles']:
+            if title['lang'] == 'en':
+                extracted_title = title['title']
+            else:
+                pass
+        cpes.append(str(cpe_name + ';' + extracted_title + ';'))
+    return cpes
+
+
+def perform_calculations(cpes, requestno):
+    '''Performs calculations for searching for CPEs on every CPE in a given CPE list'''
+    if not SILENT and DEBUG:
+        print(f"[+] Performing calculations on request number {requestno}")
+    cpe_info = []
+    for cpe in cpes:
+        cpe_mod = cpe.split(';')[0].replace("_", ":").replace("*", "").replace("\\", "")
+        cpe_name = cpe.split(';')[1].lower()
+        cpe_name_elems = [x for x in cpe_name.split()]
+        cpe_elems = [x for x in cpe_mod[10:].split(':') if x != ""]
+        words = TEXT_TO_VECTOR_RE.findall(" ".join(cpe_elems + cpe_name_elems))
+        cpe_tf = Counter(words)
+        for term, tf in cpe_tf.items():
+            cpe_tf[term] = tf / len(cpe_tf)
+        cpe_abs = math.sqrt(sum([cnt**2 for cnt in cpe_tf.values()]))
+        cpe_info.append((cpe.split(';')[0].lower(), cpe_tf, cpe_abs))
+    return cpe_info
+
+async def worker(headers, params, requestno):
+    '''Handles requests within its offset space asychronously, then performs processing steps to produce final database.'''
+    async with RATE_LIMIT:
+        api_data_response = await api_request(headers=headers, params=params, requestno=requestno)
+    if api_data_response is not None:
+        cpes = intermediate_process(api_data=api_data_response, requestno=requestno)
+        return perform_calculations(cpes=cpes, requestno=requestno)
+    else:
+        raise TypeError(f'api_data_response appears to be None.')
 
 async def update(cpe_version):
     '''Pulls current CPE data via the CPE API for an initial database build'''
@@ -100,65 +139,28 @@ async def update(cpe_version):
     
     offset = START_INDEX
 
-    # initial first request, also to set parameters  #TODO: Check if none
+    # initial first request, also to set parameters
     params = {'resultsPerPage': RESULTS_PER_PAGE, 'startIndex': offset}
     headers = {'apiKey': NVD_API_KEY}
     cpe_api_data_page = requests.get(url=CPE_API_URL,headers=headers,params=params)
     numTotalResults = cpe_api_data_page.json().get('totalResults')
-    tasks = []
 
     # make necessary amount of requests
     requestno = 0
+    tasks = []
     while(offset <= numTotalResults):
         requestno += 1
         params = {'resultsPerPage': RESULTS_PER_PAGE, 'startIndex': offset}
-        task = asyncio.ensure_future(api_request(headers=headers, params=params, requestno = requestno))
+        task = asyncio.ensure_future(worker(headers=headers, params=params, requestno = requestno))
         tasks.append(task)
         offset += RESULTS_PER_PAGE
-    cpe_api_data_responses = await asyncio.gather(*tasks)
 
-    print("[+] Doing intermediate processing.")
-    respfile = f"{CPE_DATA_FILES[cpe_version]}_workfile"
-    with open(respfile, "a") as intermediate_file:
-        for cpe_api_data_response in cpe_api_data_responses:
-                products = cpe_api_data_response.get('products')
-                for product in products:
-                    extracted_title = ""
-                    cpe_name = product['cpe']['cpeName']
-                    for title in product['cpe']['titles']:
-                        if title['lang'] == 'en':
-                            extracted_title = title['title']
-                        else:
-                            pass
-                    intermediate_file.write('%s;%s;\n' % (cpe_name, extracted_title))
-    intermediate_file.close()
+    cpe_api_data = await asyncio.gather(*tasks)
 
-    print("[+] Moving on to doing calculations.")
-    cpe_items = []
-    with open(respfile, encoding="utf8") as fin:
-        for line in fin:
-            cpe_mod = line.strip('\n').split(';')[0].replace("_", ":").replace("*", "").replace("\\", "")
-            cpe_title = line.split(';')[1].lower()
-            cpe_title_elems = [x for x in cpe_title.split()]
-            cpe_elems = [x for x in cpe_mod[10:].split(':') if x != ""]
-            words = TEXT_TO_VECTOR_RE.findall(" ".join(cpe_elems + cpe_title_elems))
-            cpe_tf = Counter(words)
-            for term, tf in cpe_tf.items():
-                cpe_tf[term] = tf / len(cpe_tf)
-            cpe_abs = math.sqrt(sum([cnt**2 for cnt in cpe_tf.values()]))
-            cpe_info = (line.split(';')[0].lower(), cpe_tf, cpe_abs)
-            cpe_items.append(cpe_info)
-        fin.close()
-
-    os.remove(respfile)
-
-    with open(CPE_DATA_FILES[cpe_version], "w") as outfile:
-        for name, cpe_tf, cpe_abs in cpe_items:
-            outfile.write('%s;%s;%f\n' % (name, json.dumps(cpe_tf), cpe_abs))
-
-# def update(cpe_version):
-#     '''Pulls current CPE data via the CPE API database update taking in account date ranges'''
-#     pass
+    with open(CPE_DATA_FILES[cpe_version], "a") as outfile:
+        for task in cpe_api_data:
+            for cpe_name, cpe_tf, cpe_abs in task:
+                outfile.write('%s;%s;%f\n' % (cpe_name, json.dumps(cpe_tf), cpe_abs))
 
 def _get_alternative_queries(init_queries, zero_extend_versions=False):
     alt_queries_mapping = {}

@@ -16,23 +16,11 @@ jobs:
         uses: actions/setup-python@v4
         with:
           cache: 'pip'
-          python-version: '3.11'
+          version: '3.8'
       - name: Upgrade Pip
         run: python3 -m pip install --upgrade pip
       - name: Install Dependencies
         run: pip3 install -r requirements.txt
-      - name: Sanity Check
-        run: |
-          pip3 freeze
-          pip freeze
-      - name: Test Secret Key
-        env:
-          TEST_SECRET: ${{ secrets.TEST_SECRET }}
-        run: echo $TEST_SECRET
-      - name: Test env vars for python
-        run: python -c 'import os;print(os.environ)'
-        env:
-          TEST_SECRET: ${{ secrets.TEST_SECRET }} 
       - name: Get CPEs
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
