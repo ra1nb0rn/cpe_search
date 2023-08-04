@@ -2,7 +2,7 @@
 Search for Common Platform Enumeration (CPE) strings using software names and titles.
 
 ## About
-*cpe_search* can be used to search for Common Platform Enumeration (CPE) strings using software names and titles. For example, if some tool discovered a web server running *Apache 2.4.39*, you can use this tool to easily and quickly retrieve the corresponding CPE string *cpe:2.3:a:apache:http_server:2.4.39:*:*:*:*:*:*:**. Thereafter, the retrieved CPE string can be used to accurately search for vulnerabilities, e.g. via the [Online NVD](https://nvd.nist.gov/) or [AVAIN](https://github.com/ra1nb0rn/avain)'s *avain-cve_correlation* subtool. *cpe_search* supports CPE 2.3.
+*cpe_search* can be used to search for Common Platform Enumeration (CPE) strings using software names and titles. For example, if some tool discovered a web server running *Apache 2.4.39*, you can use this tool to easily and quickly retrieve the corresponding CPE string *cpe:2.3:<zero-width  space>a:apache:http_server:2.4.39:\*\:\*:\*:\*:\*:\*:\**. Thereafter, the retrieved CPE string can be used to accurately search for vulnerabilities, e.g. via the [Online NVD](https://nvd.nist.gov/) or [AVAIN](https://github.com/ra1nb0rn/avain)'s *avain-cve_correlation* subtool. *cpe_search* supports CPE 2.3.
 
 ## Usage
 *cpe_search*'s usage information is shown in the following:

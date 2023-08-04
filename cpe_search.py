@@ -24,6 +24,7 @@ NVD_API_KEY = os.getenv('NVD_API_KEY')
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CPE_API_URL = "https://services.nvd.nist.gov/rest/json/cpes/2.0/"
 CPE_DATA_FILES = {"2.3": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.3.csv")}
+DEPRECATED_CPES = os.path.join(SCRIPT_DIR, "deprecated-cpes.json")
 TEXT_TO_VECTOR_RE = re.compile(r"[\w+\.]+")
 GET_ALL_CPES_RE = re.compile(r'(.*);.*;.*')
 LOAD_CPE_TFS_MUTEX = threading.Lock()
@@ -78,15 +79,22 @@ def intermediate_process(api_data, requestno):
         print(f"[+] Intermediate processing on request number {requestno}")
     products = api_data.get('products')
     cpes = []
+    deprecations = []
     for product in products:
         extracted_title = ""
+        deprecated = product['cpe']['deprecated']
         cpe_name = product['cpe']['cpeName']
         for title in product['cpe']['titles']:
             #assume an english title is always present
             if title['lang'] == 'en':
                 extracted_title = title['title']
+        if deprecated:
+            deprecated_by = {cpe_name:[]}
+            for item in product['cpe']['deprecatedBy']:
+                deprecated_by[cpe_name].append(item.get('cpeName'))
+            deprecations.append(deprecated_by)
         cpes.append(str(cpe_name + ';' + extracted_title + ';'))
-    return cpes
+    return cpes, deprecations
 
 
 def perform_calculations(cpes, requestno):
@@ -112,8 +120,8 @@ async def worker(headers, params, requestno):
     async with RATE_LIMIT:
         api_data_response = await api_request(headers=headers, params=params, requestno=requestno)
     if api_data_response is not None:
-        cpes = intermediate_process(api_data=api_data_response, requestno=requestno)
-        return perform_calculations(cpes=cpes, requestno=requestno)
+        (cpes, deprecations) = intermediate_process(api_data=api_data_response, requestno=requestno)
+        return perform_calculations(cpes=cpes, requestno=requestno), deprecations
     else:
         raise TypeError(f'api_data_response appears to be None.')
 
@@ -144,8 +152,16 @@ async def update():
 
     with open(CPE_DATA_FILES['2.3'], "a") as outfile:
         for task in cpe_api_data:
-            for cpe_name, cpe_tf, cpe_abs in task:
-                outfile.write('%s;%s;%f\n' % (cpe_name, json.dumps(cpe_tf), cpe_abs))
+            for cpe_triple in task[0]:
+                    outfile.write('%s;%s;%f\n' % (cpe_triple[0], json.dumps(cpe_triple[1]), cpe_triple[2]))
+
+    with open(DEPRECATED_CPES, "a") as outfile:
+        final = []
+        for task in cpe_api_data:
+            for deprecation in task[1]:
+                        final.append(deprecation)
+        outfile.write('%s\n' % json.dumps(final))
+        outfile.close()
 
 def _get_alternative_queries(init_queries, zero_extend_versions=False):
     alt_queries_mapping = {}
