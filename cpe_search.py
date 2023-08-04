@@ -10,15 +10,9 @@ import string
 import sys
 import threading
 import requests
-from urllib.parse import unquote
-from urllib.request import urlretrieve
-import zipfile
 import asyncio
 import aiohttp
 from aiolimiter import AsyncLimiter
-from time import sleep
-from datetime import datetime, timedelta
-from collections import deque
 
 try:  # use ujson if available
     import ujson as json
@@ -29,11 +23,7 @@ except ModuleNotFoundError:
 NVD_API_KEY = os.getenv('NVD_API_KEY')
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CPE_API_URL = "https://services.nvd.nist.gov/rest/json/cpes/2.0/"
-CPE_DATA_FILES = {"2.2": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.2.csv"),
-                  "2.3": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.3.csv")}
-CPE_DICT_ITEM_RE = re.compile(r"<cpe-item name=\"([^\"]*)\">.*?<title xml:lang=\"en-US\"[^>]*>([^<]*)</title>.*?<cpe-23:cpe23-item name=\"([^\"]*)\"", flags=re.DOTALL)
-CPE_TITLE_RE = re.compile(r";(.*?);")
-CPE_NAME_RE = re.compile(r"^[^;]*")
+CPE_DATA_FILES = {"2.3": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.3.csv")}
 TEXT_TO_VECTOR_RE = re.compile(r"[\w+\.]+")
 GET_ALL_CPES_RE = re.compile(r'(.*);.*;.*')
 LOAD_CPE_TFS_MUTEX = threading.Lock()
@@ -44,13 +34,10 @@ TERMS = []
 TERMS_MAP = {}
 SILENT = False
 ALT_QUERY_MAXSPLIT = 1
-
 RATE_LIMIT = AsyncLimiter(25.0, 30.0)
-
 RESULTS_PER_PAGE = 10000
 START_INDEX = 0
-
-DEBUG = True
+DEBUG = False
 
 def parse_args():
     """Parse command line arguments"""
@@ -58,7 +45,6 @@ def parse_args():
     parser.add_argument("-b", "--build", action="store_true", help="Build the local CPE database from scratch")
     parser.add_argument("-u", "--update", action="store_true", help="Update the local CPE database")
     parser.add_argument("-c", "--count", default=3, type=int, help="The number of CPEs to show in the similarity overview (default: 3)")
-    parser.add_argument("-v", "--version", default="2.2", choices=["2.2", "2.3"], help="The CPE version to use: 2.2 or 2.3 (default: 2.2)")
     parser.add_argument("-q", "--query", dest="queries", metavar="QUERY", action="append", help="A query, i.e. textual software name / title like 'Apache 2.4.39' or 'Wordpress 5.7.2'")
 
     args = parser.parse_args()
@@ -96,10 +82,9 @@ def intermediate_process(api_data, requestno):
         extracted_title = ""
         cpe_name = product['cpe']['cpeName']
         for title in product['cpe']['titles']:
+            #assume an english title is always present
             if title['lang'] == 'en':
                 extracted_title = title['title']
-            else:
-                pass
         cpes.append(str(cpe_name + ';' + extracted_title + ';'))
     return cpes
 
@@ -132,7 +117,7 @@ async def worker(headers, params, requestno):
     else:
         raise TypeError(f'api_data_response appears to be None.')
 
-async def update(cpe_version):
+async def update():
     '''Pulls current CPE data via the CPE API for an initial database build'''
     if not SILENT:
         print("[+] Getting NVD's official CPE data (might take some time)")
@@ -157,7 +142,7 @@ async def update(cpe_version):
 
     cpe_api_data = await asyncio.gather(*tasks)
 
-    with open(CPE_DATA_FILES[cpe_version], "a") as outfile:
+    with open(CPE_DATA_FILES['2.3'], "a") as outfile:
         for task in cpe_api_data:
             for cpe_name, cpe_tf, cpe_abs in task:
                 outfile.write('%s;%s;%f\n' % (cpe_name, json.dumps(cpe_tf), cpe_abs))
@@ -217,13 +202,13 @@ def _get_alternative_queries(init_queries, zero_extend_versions=False):
     return alt_queries_mapping
 
 
-def _load_cpe_tfs(cpe_version="2.3"):
+def _load_cpe_tfs():
     """Load CPE TFs from file"""
 
     LOAD_CPE_TFS_MUTEX.acquire()
     if not CPE_TFS:
         # iterate over every CPE, for every query compute similarity scores and keep track of most similar CPEs
-        with open(CPE_DATA_FILES[cpe_version], "r") as fout:
+        with open(CPE_DATA_FILES['2.3'], "r") as fout:
             for line in fout:
                 cpe, cpe_tf, cpe_abs = line.rsplit(';', maxsplit=2)
                 cpe_tf = json.loads(cpe_tf)
@@ -241,7 +226,7 @@ def _load_cpe_tfs(cpe_version="2.3"):
     LOAD_CPE_TFS_MUTEX.release()
 
 
-def _search_cpes(queries_raw, cpe_version, count, threshold, zero_extend_versions=False, keep_data_in_memory=False):
+def _search_cpes(queries_raw, count, threshold, zero_extend_versions=False, keep_data_in_memory=False):
     """Facilitate CPE search as specified by the program arguments"""
 
     # create term frequencies and normalization factors for all queries
@@ -263,7 +248,7 @@ def _search_cpes(queries_raw, cpe_version, count, threshold, zero_extend_version
         most_similar[query] = [("N/A", -1)]
 
     if keep_data_in_memory:
-        _load_cpe_tfs(cpe_version)
+        _load_cpe_tfs()
         for cpe, indirect_cpe_tf, cpe_abs in CPE_TFS:
             for query in queries:
                 query_tf, query_abs = query_infos[query]
@@ -300,7 +285,7 @@ def _search_cpes(queries_raw, cpe_version, count, threshold, zero_extend_version
                         most_similar[query] = most_similar[query][:insert_idx] + [(cpe, sim_score)] + most_similar[query][insert_idx:-1]
     else:
         # iterate over every CPE, for every query compute similarity scores and keep track of most similar
-        with open(CPE_DATA_FILES[cpe_version], "r") as fout:
+        with open(CPE_DATA_FILES['2.3'], "r") as fout:
             for line in fout:
                 cpe, cpe_tf, cpe_abs = line.rsplit(';', maxsplit=2)
                 cpe_tf = json.loads(cpe_tf)
@@ -545,25 +530,25 @@ def create_base_cpe_if_versionless_query(cpe, query):
     return None
 
 
-def get_all_cpes(version):
+def get_all_cpes():
     if not CPE_TFS:
-        with open(CPE_DATA_FILES[version], "r") as f:
+        with open(CPE_DATA_FILES['2.3'], "r") as f:
             cpes = GET_ALL_CPES_RE.findall(f.read())
     else:
-        _load_cpe_tfs(version)
+        _load_cpe_tfs()
         cpes = [cpe_tf[0] for cpe_tf in CPE_TFS]
 
     return cpes
 
 
-def search_cpes(queries, cpe_version="2.3", count=3, threshold=-1, zero_extend_versions=False, keep_data_in_memory=False):
+def search_cpes(queries, count=3, threshold=-1, zero_extend_versions=False, keep_data_in_memory=False):
     if not queries:
         return {}
 
     if isinstance(queries, str):
         queries = [queries]
 
-    return _search_cpes(queries, cpe_version, count, threshold, zero_extend_versions, keep_data_in_memory)
+    return _search_cpes(queries, count, threshold, zero_extend_versions, keep_data_in_memory)
 
 
 if __name__ == "__main__":
@@ -571,15 +556,19 @@ if __name__ == "__main__":
     args = parse_args()
     loop = asyncio.get_event_loop()
     if args.update:
-        loop.run_until_complete(update(args.version))
+        if not NVD_API_KEY:
+            raise TypeError("No API Key found - Please provide a valid API Key for the NVD API!")
+        loop.run_until_complete(update())
 
-    if args.queries and not os.path.isfile(CPE_DATA_FILES[args.version]):
+    if args.queries and not os.path.isfile(CPE_DATA_FILES['2.3']):
         if not SILENT:
             print("[+] Running initial setup (might take a couple of minutes)", file=sys.stderr)
-        loop.run_until_complete(update(args.version))
+        if not NVD_API_KEY:
+            raise TypeError("No API Key found - Please provide a valid API Key for the NVD API!")
+        loop.run_until_complete(update())
 
     if args.queries:
-        results = search_cpes(args.queries, args.version, args.count)
+        results = search_cpes(args.queries, args.count)
 
         for i, query in enumerate(results):
             if not SILENT and i > 0:
