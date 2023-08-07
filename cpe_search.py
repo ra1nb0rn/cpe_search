@@ -10,10 +10,6 @@ import string
 import sys
 import threading
 
-import asyncio
-import aiohttp
-from aiolimiter import AsyncLimiter
-import requests
 
 try:  # use ujson if available
     import ujson as json
@@ -155,7 +151,7 @@ async def update():
     offset = 0
     params = {'resultsPerPage': API_CPE_RESULTS_PER_PAGE, 'startIndex': offset}
     headers = {'apiKey': nvd_api_key}
-    cpe_api_data_page = requests.get(url=CPE_API_URL,headers=headers,params=params)
+    cpe_api_data_page = requests.get(url=CPE_API_URL, headers=headers, params=params)
     numTotalResults = cpe_api_data_page.json().get('totalResults')
 
     # make necessary amount of requests
@@ -595,14 +591,24 @@ if __name__ == "__main__":
     if args.verbose:
         SILENT = False
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    perform_update = False
+
     if args.update:
-        loop.run_until_complete(update())
+        perform_update = True
 
     if args.queries and not os.path.isfile(CPE_DICT_FILE):
         if not SILENT:
             print("[+] Running initial setup (might take a couple of minutes)", file=sys.stderr)
+        perform_update = True
+
+    if perform_update:
+        import asyncio
+        import aiohttp
+        from aiolimiter import AsyncLimiter
+        import requests
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         loop.run_until_complete(update())
 
     if args.queries:
