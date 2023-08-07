@@ -157,12 +157,12 @@ async def update():
 
     cpe_api_data = await asyncio.gather(*tasks)
 
-    with open(CPE_DATA_FILES['2.3'], "a") as outfile:
+    with open(CPE_DATA_FILES['2.3'], "w") as outfile:
         for task in cpe_api_data:
             for cpe_triple in task[0]:
                     outfile.write('%s;%s;%f\n' % (cpe_triple[0], json.dumps(cpe_triple[1]), cpe_triple[2]))
 
-    with open(DEPRECATED_CPES, "a") as outfile:
+    with open(DEPRECATED_CPES, "w") as outfile:
         final = []
         for task in cpe_api_data:
             for deprecation in task[1]:
@@ -577,7 +577,8 @@ def search_cpes(queries, count=3, threshold=-1, zero_extend_versions=False, keep
 if __name__ == "__main__":
     SILENT = not sys.stdout.isatty()
     args = parse_args()
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     if args.update:
         loop.run_until_complete(update())
 
