@@ -9,22 +9,23 @@ import re
 import string
 import sys
 import threading
-import requests
+
 import asyncio
 import aiohttp
 from aiolimiter import AsyncLimiter
+import requests
 
 try:  # use ujson if available
     import ujson as json
 except ModuleNotFoundError:
     import json
 
+
 # Constants
-NVD_API_KEY = os.getenv('NVD_API_KEY')
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CPE_API_URL = "https://services.nvd.nist.gov/rest/json/cpes/2.0/"
-CPE_DATA_FILES = {"2.3": os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.3.csv")}
-DEPRECATED_CPES = os.path.join(SCRIPT_DIR, "deprecated-cpes.json")
+CPE_DICT_FILE = os.path.join(SCRIPT_DIR, "cpe-search-dictionary_v2.3.csv")
+DEPRECATED_CPES_FILE = os.path.join(SCRIPT_DIR, "deprecated-cpes.json")
 TEXT_TO_VECTOR_RE = re.compile(r"[\w+\.]+")
 GET_ALL_CPES_RE = re.compile(r'(.*);.*;.*')
 LOAD_CPE_TFS_MUTEX = threading.Lock()
@@ -33,19 +34,21 @@ VERSION_MATCH_CPE_CREATION_RE = re.compile(r'\b((\d+[\.\-]?){1,4}([a-z\d]{0,3})?
 CPE_TFS = []
 TERMS = []
 TERMS_MAP = {}
-SILENT = False
 ALT_QUERY_MAXSPLIT = 1
-RESULTS_PER_PAGE = 10000
-START_INDEX = 0
+SILENT = True
 DEBUG = False
+API_CPE_RESULTS_PER_PAGE = 10000
+NVD_API_KEY = os.getenv('NVD_API_KEY')
+
 
 def parse_args():
     """Parse command line arguments"""
+
     parser = argparse.ArgumentParser(description="Search for CPEs using software names and titles -- Created by Dustin Born (ra1nb0rn)")
-    parser.add_argument("-b", "--build", action="store_true", help="Build the local CPE database from scratch")
     parser.add_argument("-u", "--update", action="store_true", help="Update the local CPE database")
     parser.add_argument("-c", "--count", default=3, type=int, help="The number of CPEs to show in the similarity overview (default: 3)")
     parser.add_argument("-q", "--query", dest="queries", metavar="QUERY", action="append", help="A query, i.e. textual software name / title like 'Apache 2.4.39' or 'Wordpress 5.7.2'")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Be verbose and print status information")
 
     args = parser.parse_args()
     if not args.update and not args.queries:
@@ -53,14 +56,11 @@ def parse_args():
     return args
 
 
-def set_silent(silent):
-    global SILENT
-    SILENT = silent
-
 async def api_request(headers, params, requestno):
+    '''Perform request to API for one task'''
     retry_limit = 3
     retry_interval = 6
-    for i in range(retry_limit + 1):
+    for _ in range(retry_limit + 1):
             async with aiohttp.ClientSession() as session:
                 cpe_api_data_response = await session.get(url=CPE_API_URL, headers=headers, params=params)
                 if cpe_api_data_response.status == 200:
@@ -68,14 +68,17 @@ async def api_request(headers, params, requestno):
                         print(f"[+] Successfully received data from request {requestno}.")
                     return await cpe_api_data_response.json()
                 else:
-                    if not SILENT:
+                    if DEBUG:
                         print(f"[-] Received status code {cpe_api_data_response.status} on request {requestno} Retrying...")
                 await asyncio.sleep(retry_interval)
 
+
 def intermediate_process(api_data, requestno):
     '''Performs extraction of CPE names and CPE titles'''
-    if not SILENT and DEBUG:
+
+    if DEBUG:
         print(f"[+] Intermediate processing on request number {requestno}")
+
     products = api_data.get('products')
     cpes = []
     deprecations = []
@@ -84,7 +87,7 @@ def intermediate_process(api_data, requestno):
         deprecated = product['cpe']['deprecated']
         cpe_name = product['cpe']['cpeName']
         for title in product['cpe']['titles']:
-            #assume an english title is always present
+            # assume an english title is always present
             if title['lang'] == 'en':
                 extracted_title = title['title']
         if deprecated:
@@ -98,14 +101,16 @@ def intermediate_process(api_data, requestno):
 
 def perform_calculations(cpes, requestno):
     '''Performs calculations for searching for CPEs on every CPE in a given CPE list'''
-    if not SILENT and DEBUG:
+
+    if DEBUG:
         print(f"[+] Performing calculations on request number {requestno}")
+
     cpe_info = []
     for cpe in cpes:
         cpe_mod = cpe.split(';')[0].replace("_", ":").replace("*", "").replace("\\", "")
         cpe_name = cpe.split(';')[1].lower()
-        cpe_name_elems = [x for x in cpe_name.split()]
-        cpe_elems = [x for x in cpe_mod[10:].split(':') if x != ""]
+        cpe_name_elems = [word for word in cpe_name.split()]
+        cpe_elems = [cpe_part for cpe_part in cpe_mod[10:].split(':') if cpe_part != ""]
         words = TEXT_TO_VECTOR_RE.findall(" ".join(cpe_elems + cpe_name_elems))
         cpe_tf = Counter(words)
         for term, tf in cpe_tf.items():
@@ -114,8 +119,10 @@ def perform_calculations(cpes, requestno):
         cpe_info.append((cpe.split(';')[0].lower(), cpe_tf, cpe_abs))
     return cpe_info
 
+
 async def worker(headers, params, requestno, rate_limit):
     '''Handles requests within its offset space asychronously, then performs processing steps to produce final database.'''
+
     async with rate_limit:
         api_data_response = await api_request(headers=headers, params=params, requestno=requestno)
     if api_data_response is not None:
@@ -124,23 +131,25 @@ async def worker(headers, params, requestno, rate_limit):
     else:
         raise TypeError(f'api_data_response appears to be None.')
 
+
 async def update():
     '''Pulls current CPE data via the CPE API for an initial database build'''
+
     if not SILENT:
         print("[+] Getting NVD's official CPE data (might take some time)")
     
-    offset = START_INDEX
-
     if NVD_API_KEY:
         if not SILENT:
             print('[+] API Key found - Requests will be sent at a rate of 25 per 30s.')
         rate_limit = AsyncLimiter(25.0, 30.0)
     else:
-        print('[-] No API Key found - Requests will be sent at a rate of 5 per 30s. To lower build time, consider getting an NVD API Key.')
+        if not SILENT:
+            print('[-] No API Key found - Requests will be sent at a rate of 5 per 30s. To lower build time, consider getting an NVD API Key.')
         rate_limit = AsyncLimiter(5.0, 30.0)
 
     # initial first request, also to set parameters
-    params = {'resultsPerPage': RESULTS_PER_PAGE, 'startIndex': offset}
+    offset = 0
+    params = {'resultsPerPage': API_CPE_RESULTS_PER_PAGE, 'startIndex': offset}
     headers = {'apiKey': NVD_API_KEY}
     cpe_api_data_page = requests.get(url=CPE_API_URL,headers=headers,params=params)
     numTotalResults = cpe_api_data_page.json().get('totalResults')
@@ -150,25 +159,26 @@ async def update():
     tasks = []
     while(offset <= numTotalResults):
         requestno += 1
-        params = {'resultsPerPage': RESULTS_PER_PAGE, 'startIndex': offset}
+        params = {'resultsPerPage': API_CPE_RESULTS_PER_PAGE, 'startIndex': offset}
         task = asyncio.ensure_future(worker(headers=headers, params=params, requestno = requestno, rate_limit=rate_limit))
         tasks.append(task)
-        offset += RESULTS_PER_PAGE
+        offset += API_CPE_RESULTS_PER_PAGE
 
     cpe_api_data = await asyncio.gather(*tasks)
 
-    with open(CPE_DATA_FILES['2.3'], "w") as outfile:
+    with open(CPE_DICT_FILE, "w") as outfile:
         for task in cpe_api_data:
             for cpe_triple in task[0]:
                     outfile.write('%s;%s;%f\n' % (cpe_triple[0], json.dumps(cpe_triple[1]), cpe_triple[2]))
 
-    with open(DEPRECATED_CPES, "w") as outfile:
+    with open(DEPRECATED_CPES_FILE, "w") as outfile:
         final = []
         for task in cpe_api_data:
             for deprecation in task[1]:
                         final.append(deprecation)
         outfile.write('%s\n' % json.dumps(final))
         outfile.close()
+
 
 def _get_alternative_queries(init_queries, zero_extend_versions=False):
     alt_queries_mapping = {}
@@ -231,7 +241,7 @@ def _load_cpe_tfs():
     LOAD_CPE_TFS_MUTEX.acquire()
     if not CPE_TFS:
         # iterate over every CPE, for every query compute similarity scores and keep track of most similar CPEs
-        with open(CPE_DATA_FILES['2.3'], "r") as fout:
+        with open(CPE_DICT_FILE, "r") as fout:
             for line in fout:
                 cpe, cpe_tf, cpe_abs = line.rsplit(';', maxsplit=2)
                 cpe_tf = json.loads(cpe_tf)
@@ -308,7 +318,7 @@ def _search_cpes(queries_raw, count, threshold, zero_extend_versions=False, keep
                         most_similar[query] = most_similar[query][:insert_idx] + [(cpe, sim_score)] + most_similar[query][insert_idx:-1]
     else:
         # iterate over every CPE, for every query compute similarity scores and keep track of most similar
-        with open(CPE_DATA_FILES['2.3'], "r") as fout:
+        with open(CPE_DICT_FILE, "r") as fout:
             for line in fout:
                 cpe, cpe_tf, cpe_abs = line.rsplit(';', maxsplit=2)
                 cpe_tf = json.loads(cpe_tf)
@@ -483,7 +493,7 @@ def _match_cpe23_to_cpe23_from_dict_file(cpe23_in):
         if pre_cpe_in.endswith(':') or pre_cpe_in.count(':') > 9:  # skip rear parts in fixing process
             continue
 
-        with open(CPE_DATA_FILES['2.3'], "r") as fout:
+        with open(CPE_DICT_FILE, "r") as fout:
             for line in fout:
                 cpe = line.rsplit(';', maxsplit=2)[0].strip()
 
@@ -555,7 +565,7 @@ def create_base_cpe_if_versionless_query(cpe, query):
 
 def get_all_cpes():
     if not CPE_TFS:
-        with open(CPE_DATA_FILES['2.3'], "r") as f:
+        with open(CPE_DICT_FILE, "r") as f:
             cpes = GET_ALL_CPES_RE.findall(f.read())
     else:
         _load_cpe_tfs()
@@ -577,12 +587,16 @@ def search_cpes(queries, count=3, threshold=-1, zero_extend_versions=False, keep
 if __name__ == "__main__":
     SILENT = not sys.stdout.isatty()
     args = parse_args()
+
+    if args.verbose:
+        SILENT = False
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     if args.update:
         loop.run_until_complete(update())
 
-    if args.queries and not os.path.isfile(CPE_DATA_FILES['2.3']):
+    if args.queries and not os.path.isfile(CPE_DICT_FILE):
         if not SILENT:
             print("[+] Running initial setup (might take a couple of minutes)", file=sys.stderr)
         loop.run_until_complete(update())

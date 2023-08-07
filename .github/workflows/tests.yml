@@ -8,22 +8,22 @@ jobs:
   run-tests:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v3
-      - name: Update
+      - name: Perform apt package updates
         run: sudo apt-get update
-      - name: Set up Python
+      - name: Set up Python and Pip
         uses: actions/setup-python@v4
         with:
           cache: 'pip'
           version: '3.8'
       - name: Upgrade Pip
         run: python3 -m pip install --upgrade pip
-      - name: Install Dependencies
+      - name: Install Python dependencies
         run: pip3 install -r requirements.txt
-      - name: Get CPEs
+      - name: Build CPE dictionary
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: NVD_API_KEY=$NVD_API_KEY python3 cpe_search.py -u
-      - name: Testing
+      - name: Run test cases
         run: python3 test.py
