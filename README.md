@@ -2,22 +2,25 @@
 Search for Common Platform Enumeration (CPE) strings using software names and titles.
 
 ## About
-*cpe_search* can be used to search for Common Platform Enumeration (CPE) strings using software names and titles. For example, if some tool discovered a web server running *Apache 2.4.39*, you can use this tool to easily and quickly retrieve the corresponding CPE string *cpe:2.3:<zero-width  space>a:apache:http_server:2.4.39:\*\:\*:\*:\*:\*:\*:\**. Thereafter, the retrieved CPE string can be used to accurately search for vulnerabilities, e.g. via the [Online NVD](https://nvd.nist.gov/) or [AVAIN](https://github.com/ra1nb0rn/avain)'s *avain-cve_correlation* subtool. *cpe_search* supports CPE 2.3.
+*cpe_search* can be used to search for Common Platform Enumeration (CPE) strings using software names and titles. For example, if some tool discovered a web server running *Apache 2.4.39*, you can use this tool to easily and quickly retrieve the corresponding CPE 2.3 string *cpe:2.3:<zero-width  space>a:apache:http_server:2.4.39:\*\:\*:\*:\*:\*:\*:\**. Thereafter, the retrieved CPE string can be used to accurately search for vulnerabilities, e.g. via the [Online NVD](https://nvd.nist.gov/) or the [search_vulns](https://github.com/ra1nb0rn/search_vulns) tool.
 
 ## Usage
 *cpe_search*'s usage information is shown in the following:
 ```
-usage: cpe_search.py [-h] [-u] [-c COUNT] [-q QUERY]
+usage: cpe_search.py [-h] [-u] [-k API_KEY] [-c COUNT] [-q QUERY] [-v]
 
 Search for CPEs using software names and titles -- Created by Dustin Born (ra1nb0rn)
 
 optional arguments:
   -h, --help            show this help message and exit
   -u, --update          Update the local CPE database
+  -k API_KEY, --api-key API_KEY
+                        NVD API key to use for updating the local CPE dictionary
   -c COUNT, --count COUNT
                         The number of CPEs to show in the similarity overview (default: 3)
   -q QUERY, --query QUERY
                         A query, i.e. textual software name / title like 'Apache 2.4.39' or 'Wordpress 5.7.2'
+  -v, --verbose         Be verbose and print status information
 ```
 Note that when querying software with ``-q`` you have to put the software information in quotes if it contains any spaces. Also, you can use ``-q`` multiple times to make multiple queries at once. Moreover, the output can be piped to be directly useable with other tools. Here are some examples:
 * Query *Sudo 1.8.2* to retrieve its CPE 2.3 string:
@@ -50,7 +53,7 @@ Note that when querying software with ``-q`` you have to put the software inform
   ('cpe:2.3:a:adenion:blog2social:5.7.2:*:*:*:*:wordpress:*:*',
     0.6859944446591075)]
   ```
-Finally, note that when *cpe_search* is used for the first time, it invokes a small setup routine that requests data from [NVD's official API](https://services.nvd.nist.gov/rest/json/cves/2.0) and precomputes the data utilized for searches in all subsequent runs. This may take a couple of minutes initially but is only done once.
+Finally, note that when *cpe_search* is used for the first time, it invokes a small setup routine that downloads all available CPEs from the [NVD's official API](https://nvd.nist.gov/developers/products) and precomputes the data utilized for searches in all subsequent runs. This may take a couple of minutes initially but is only done once.
 
 ## License
 *cpe_search* is licensed under the MIT license, see [here](https://github.com/ra1nb0rn/cpe_search/blob/master/LICENSE).
