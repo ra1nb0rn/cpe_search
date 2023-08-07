@@ -38,7 +38,6 @@ ALT_QUERY_MAXSPLIT = 1
 SILENT = True
 DEBUG = False
 API_CPE_RESULTS_PER_PAGE = 10000
-NVD_API_KEY = os.getenv('NVD_API_KEY')
 
 
 def parse_args():
@@ -46,6 +45,7 @@ def parse_args():
 
     parser = argparse.ArgumentParser(description="Search for CPEs using software names and titles -- Created by Dustin Born (ra1nb0rn)")
     parser.add_argument("-u", "--update", action="store_true", help="Update the local CPE database")
+    parser.add_argument("-k", "--api-key", type=str, help="NVD API key to use for updating the local CPE dictionary")
     parser.add_argument("-c", "--count", default=3, type=int, help="The number of CPEs to show in the similarity overview (default: 3)")
     parser.add_argument("-q", "--query", dest="queries", metavar="QUERY", action="append", help="A query, i.e. textual software name / title like 'Apache 2.4.39' or 'Wordpress 5.7.2'")
     parser.add_argument("-v", "--verbose", action="store_true", help="Be verbose and print status information")
@@ -138,7 +138,11 @@ async def update():
     if not SILENT:
         print("[+] Getting NVD's official CPE data (might take some time)")
     
-    if NVD_API_KEY:
+    nvd_api_key = os.getenv('NVD_API_KEY')
+    if args.api_key:
+        nvd_api_key = args.api_key
+
+    if nvd_api_key:
         if not SILENT:
             print('[+] API Key found - Requests will be sent at a rate of 25 per 30s.')
         rate_limit = AsyncLimiter(25.0, 30.0)
@@ -150,7 +154,7 @@ async def update():
     # initial first request, also to set parameters
     offset = 0
     params = {'resultsPerPage': API_CPE_RESULTS_PER_PAGE, 'startIndex': offset}
-    headers = {'apiKey': NVD_API_KEY}
+    headers = {'apiKey': nvd_api_key}
     cpe_api_data_page = requests.get(url=CPE_API_URL,headers=headers,params=params)
     numTotalResults = cpe_api_data_page.json().get('totalResults')
 
