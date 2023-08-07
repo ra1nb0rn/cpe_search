@@ -35,7 +35,6 @@ TERMS = []
 TERMS_MAP = {}
 SILENT = False
 ALT_QUERY_MAXSPLIT = 1
-RATE_LIMIT = AsyncLimiter(25.0, 30.0)
 RESULTS_PER_PAGE = 10000
 START_INDEX = 0
 DEBUG = False
@@ -115,9 +114,9 @@ def perform_calculations(cpes, requestno):
         cpe_info.append((cpe.split(';')[0].lower(), cpe_tf, cpe_abs))
     return cpe_info
 
-async def worker(headers, params, requestno):
+async def worker(headers, params, requestno, rate_limit):
     '''Handles requests within its offset space asychronously, then performs processing steps to produce final database.'''
-    async with RATE_LIMIT:
+    async with rate_limit:
         api_data_response = await api_request(headers=headers, params=params, requestno=requestno)
     if api_data_response is not None:
         (cpes, deprecations) = intermediate_process(api_data=api_data_response, requestno=requestno)
@@ -132,6 +131,14 @@ async def update():
     
     offset = START_INDEX
 
+    if NVD_API_KEY:
+        if not SILENT:
+            print('[+] API Key found - Requests will be sent at a rate of 25 per 30s.')
+        rate_limit = AsyncLimiter(25.0, 30.0)
+    else:
+        print('[-] No API Key found - Requests will be sent at a rate of 5 per 30s. To lower build time, consider getting an NVD API Key.')
+        rate_limit = AsyncLimiter(5.0, 30.0)
+
     # initial first request, also to set parameters
     params = {'resultsPerPage': RESULTS_PER_PAGE, 'startIndex': offset}
     headers = {'apiKey': NVD_API_KEY}
@@ -144,7 +151,7 @@ async def update():
     while(offset <= numTotalResults):
         requestno += 1
         params = {'resultsPerPage': RESULTS_PER_PAGE, 'startIndex': offset}
-        task = asyncio.ensure_future(worker(headers=headers, params=params, requestno = requestno))
+        task = asyncio.ensure_future(worker(headers=headers, params=params, requestno = requestno, rate_limit=rate_limit))
         tasks.append(task)
         offset += RESULTS_PER_PAGE
 
@@ -572,15 +579,11 @@ if __name__ == "__main__":
     args = parse_args()
     loop = asyncio.get_event_loop()
     if args.update:
-        if not NVD_API_KEY:
-            raise TypeError("No API Key found - Please provide a valid API Key for the NVD API!")
         loop.run_until_complete(update())
 
     if args.queries and not os.path.isfile(CPE_DATA_FILES['2.3']):
         if not SILENT:
             print("[+] Running initial setup (might take a couple of minutes)", file=sys.stderr)
-        if not NVD_API_KEY:
-            raise TypeError("No API Key found - Please provide a valid API Key for the NVD API!")
         loop.run_until_complete(update())
 
     if args.queries:
