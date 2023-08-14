@@ -128,29 +128,29 @@ async def worker(headers, params, requestno, rate_limit):
         raise TypeError(f'api_data_response appears to be None.')
 
 
-async def update():
+async def update(nvd_api_key=None):
     '''Pulls current CPE data via the CPE API for an initial database build'''
 
     if not SILENT:
         print("[+] Getting NVD's official CPE data (might take some time)")
     
-    nvd_api_key = os.getenv('NVD_API_KEY')
-    if args.api_key:
-        nvd_api_key = args.api_key
+    if not nvd_api_key:
+        nvd_api_key = os.getenv('NVD_API_KEY')
 
     if nvd_api_key:
         if not SILENT:
             print('[+] API Key found - Requests will be sent at a rate of 25 per 30s.')
         rate_limit = AsyncLimiter(25.0, 30.0)
+        headers = {'apiKey': nvd_api_key}
     else:
         if not SILENT:
             print('[-] No API Key found - Requests will be sent at a rate of 5 per 30s. To lower build time, consider getting an NVD API Key.')
         rate_limit = AsyncLimiter(5.0, 30.0)
+        headers = {}
 
     # initial first request, also to set parameters
     offset = 0
     params = {'resultsPerPage': API_CPE_RESULTS_PER_PAGE, 'startIndex': offset}
-    headers = {'apiKey': nvd_api_key}
     cpe_api_data_page = requests.get(url=CPE_API_URL, headers=headers, params=params)
     numTotalResults = cpe_api_data_page.json().get('totalResults')
 
@@ -609,7 +609,7 @@ if __name__ == "__main__":
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        loop.run_until_complete(update())
+        loop.run_until_complete(update(args.api_key))
 
     if args.queries:
         results = search_cpes(args.queries, args.count)
