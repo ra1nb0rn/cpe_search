@@ -53,7 +53,7 @@ Note that when querying software with ``-q`` you have to put the software inform
   ('cpe:2.3:a:adenion:blog2social:5.7.2:*:*:*:*:wordpress:*:*',
     0.6859944446591075)]
   ```
-Finally, note that when *cpe_search* is used for the first time, it invokes a small setup routine that downloads all available CPEs from the [NVD's official API](https://nvd.nist.gov/developers/products) and precomputes the data utilized for searches in all subsequent runs. This may take a couple of minutes initially but is only done once.
+Finally, note that when *cpe_search* is used for the first time, it invokes a small setup routine that downloads all available CPEs from the [NVD's official API](https://nvd.nist.gov/developers/products) and precomputes the data utilized for searches in all subsequent runs. This may take a couple of minutes initially but is only done once. To speed this process up, you can provide an NVD API key if you have one. The API key can be provided with the ``-k`` argument or specified in an environment variable called ``NVD_API_KEY``.
 
 ## License
 *cpe_search* is licensed under the MIT license, see [here](https://github.com/ra1nb0rn/cpe_search/blob/master/LICENSE).

@@ -133,7 +133,7 @@ async def update(nvd_api_key=None):
 
     if not SILENT:
         print("[+] Getting NVD's official CPE data (might take some time)")
-    
+
     if not nvd_api_key:
         nvd_api_key = os.getenv('NVD_API_KEY')
 

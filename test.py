@@ -3,18 +3,18 @@
 import unittest
 from cpe_search import search_cpes
 
-class TestSearches(unittest.TestCase): 
+class TestSearches(unittest.TestCase):
 
     def test_search_wp_572(self):
         self.maxDiff = None
         result = str(search_cpes(queries='WordPress 5.7.2'))
         self.assertEqual(result, "{'WordPress 5.7.2': [('cpe:2.3:a:wordpress:wordpress:5.7.2:*:*:*:*:*:*:*', 0.9805804786431419), ('cpe:2.3:a:wordpress:wordpress:-:*:*:*:*:*:*:*', 0.7071067811865475), ('cpe:2.3:a:adenion:blog2social:5.7.2:*:*:*:*:wordpress:*:*', 0.6859944446591075)]}")
-    
+
     def test_search_apache_2425(self):
         self.maxDiff = None
         result = str(search_cpes(queries='Apache 2.4.25'))
         self.assertEqual(result, "{'Apache 2.4.25': [('cpe:2.3:a:apache:http_server:2.4.25:*:*:*:*:*:*:*', 0.737210014936463), ('cpe:2.3:a:apache:apache-airflow-providers-apache-spark:-:*:*:*:*:*:*:*', 0.600000153741923), ('cpe:2.3:a:apache:apache-airflow-providers-apache-hive:-:*:*:*:*:*:*:*', 0.600000153741923)]}")
-    
+
     def test_search_proftpd_133c(self):
         self.maxDiff = None
         result = str(search_cpes(queries='Proftpd 1.3.3c'))
