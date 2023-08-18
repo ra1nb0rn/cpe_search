@@ -31,9 +31,10 @@ CPE_TFS = []
 TERMS = []
 TERMS_MAP = {}
 ALT_QUERY_MAXSPLIT = 1
+API_CPE_RESULTS_PER_PAGE = 10000
+UPDATE_SUCCESS = True
 SILENT = True
 DEBUG = False
-API_CPE_RESULTS_PER_PAGE = 10000
 
 
 def parse_args():
@@ -54,10 +55,17 @@ def parse_args():
 
 async def api_request(headers, params, requestno):
     '''Perform request to API for one task'''
+
+    global UPDATE_SUCCESS
+
+    if not UPDATE_SUCCESS:
+        return None
+
     retry_limit = 3
     retry_interval = 6
     for _ in range(retry_limit + 1):
-            async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession() as session:
+            try:
                 cpe_api_data_response = await session.get(url=CPE_API_URL, headers=headers, params=params)
                 if cpe_api_data_response.status == 200:
                     if DEBUG:
@@ -67,6 +75,11 @@ async def api_request(headers, params, requestno):
                     if DEBUG:
                         print(f"[-] Received status code {cpe_api_data_response.status} on request {requestno} Retrying...")
                 await asyncio.sleep(retry_interval)
+            except Exception as e:
+                if UPDATE_SUCCESS and not SILENT:
+                    print('Got the following exception when downloading vuln data via API: %s' % str(e))
+                UPDATE_SUCCESS = False
+                return None
 
 
 def intermediate_process(api_data, requestno):
@@ -119,13 +132,29 @@ def perform_calculations(cpes, requestno):
 async def worker(headers, params, requestno, rate_limit):
     '''Handles requests within its offset space asychronously, then performs processing steps to produce final database.'''
 
+    global UPDATE_SUCCESS
+
     async with rate_limit:
         api_data_response = await api_request(headers=headers, params=params, requestno=requestno)
+
+    if not UPDATE_SUCCESS:
+        return None
+
     if api_data_response is not None:
-        (cpes, deprecations) = intermediate_process(api_data=api_data_response, requestno=requestno)
-        return perform_calculations(cpes=cpes, requestno=requestno), deprecations
+        try:
+            (cpes, deprecations) = intermediate_process(api_data=api_data_response, requestno=requestno)
+            cpe_infos = perform_calculations(cpes=cpes, requestno=requestno), deprecations
+            return cpe_infos
+        except Exception as e:
+            if UPDATE_SUCCESS and not SILENT:
+                print('Got the following exception when downloading vuln data via API: %s' % str(e))
+            UPDATE_SUCCESS = False
+            return None
     else:
-        raise TypeError(f'api_data_response appears to be None.')
+        UPDATE_SUCCESS = False
+        if not SILENT:
+            print('api_data_response appears to be None.')
+        return None
 
 
 async def update(nvd_api_key=None):
@@ -164,20 +193,28 @@ async def update(nvd_api_key=None):
         tasks.append(task)
         offset += API_CPE_RESULTS_PER_PAGE
 
-    cpe_api_data = await asyncio.gather(*tasks)
+    while True:
+        finished_tasks, pending_tasks = await asyncio.wait(tasks, return_when=asyncio.ALL_COMPLETED, timeout=2)
+        if len(pending_tasks) < 1 or not UPDATE_SUCCESS:
+            break
+
+    if not UPDATE_SUCCESS:
+        return False
 
     with open(CPE_DICT_FILE, "w") as outfile:
-        for task in cpe_api_data:
-            for cpe_triple in task[0]:
-                    outfile.write('%s;%s;%f\n' % (cpe_triple[0], json.dumps(cpe_triple[1]), cpe_triple[2]))
+        for task in finished_tasks:
+            for cpe_triple in task.result()[0]:
+                outfile.write('%s;%s;%f\n' % (cpe_triple[0], json.dumps(cpe_triple[1]), cpe_triple[2]))
 
     with open(DEPRECATED_CPES_FILE, "w") as outfile:
         final = []
-        for task in cpe_api_data:
-            for deprecation in task[1]:
-                        final.append(deprecation)
+        for task in finished_tasks:
+            for deprecation in task.result()[1]:
+                final.append(deprecation)
         outfile.write('%s\n' % json.dumps(final))
         outfile.close()
+
+    return True
 
 
 def _get_alternative_queries(init_queries, zero_extend_versions=False):
@@ -610,6 +647,9 @@ if __name__ == "__main__":
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop.run_until_complete(update(args.api_key))
+
+        if not UPDATE_SUCCESS:
+            print('[-] Failed updating the local CPE database!')
 
     if args.queries:
         results = search_cpes(args.queries, args.count)
