@@ -160,6 +160,13 @@ async def worker(headers, params, requestno, rate_limit):
 async def update(nvd_api_key=None):
     '''Pulls current CPE data via the CPE API for an initial database build'''
 
+    # import required modules in case they haven't been imported yet
+    global asyncio, aiohttp, AsyncLimiter, requests
+    import asyncio
+    import aiohttp
+    from aiolimiter import AsyncLimiter
+    import requests
+
     if not SILENT:
         print("[+] Getting NVD's official CPE data (might take some time)")
 
