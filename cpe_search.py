@@ -77,7 +77,7 @@ async def api_request(headers, params, requestno):
                 await asyncio.sleep(retry_interval)
             except Exception as e:
                 if UPDATE_SUCCESS and not SILENT:
-                    print('Got the following exception when downloading vuln data via API: %s' % str(e))
+                    print('Got the following exception when downloading CPE data via API: %s' % str(e))
                 UPDATE_SUCCESS = False
                 return None
 
@@ -147,7 +147,7 @@ async def worker(headers, params, requestno, rate_limit):
             return cpe_infos
         except Exception as e:
             if UPDATE_SUCCESS and not SILENT:
-                print('Got the following exception when downloading vuln data via API: %s' % str(e))
+                print('Got the following exception when downloading CPE data via API: %s' % str(e))
             UPDATE_SUCCESS = False
             return None
     else:
@@ -187,7 +187,11 @@ async def update(nvd_api_key=None):
     # initial first request, also to set parameters
     offset = 0
     params = {'resultsPerPage': API_CPE_RESULTS_PER_PAGE, 'startIndex': offset}
-    cpe_api_data_page = requests.get(url=CPE_API_URL, headers=headers, params=params)
+    try:
+        cpe_api_data_page = requests.get(url=CPE_API_URL, headers=headers, params=params)
+    except Exception as e:
+        print('Got the following exception when downloading CPE data via API: %s' % str(e))
+        return False
     numTotalResults = cpe_api_data_page.json().get('totalResults')
 
     # make necessary amount of requests
