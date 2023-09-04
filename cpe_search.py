@@ -242,6 +242,14 @@ def _get_alternative_queries(init_queries, zero_extend_versions=False):
             alt_query = query.replace('httpd', 'http')
             alt_queries_mapping[query].append(alt_query)
 
+        if 'citrix' in query and (query.startswith('adc ') or query.endswith(' adc') or ' adc ' in query):
+            alt_query = query.replace('adc', 'application delivery controller')
+            alt_queries_mapping[query].append(alt_query)
+
+        if 'dell' in query and (query.startswith('omsa ') or query.endswith(' omsa') or ' omsa ' in query):
+            alt_query = query.replace('omsa', 'openmanage server administrator')
+            alt_queries_mapping[query].append(alt_query)
+
         # split certain version parts with space, e.g. 'openssh 7.4p1' --> 'openssh 7.4 p1'
         pot_alt_query = ''
         cur_char_class = string.ascii_letters
