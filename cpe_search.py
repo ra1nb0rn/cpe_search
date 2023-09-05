@@ -212,10 +212,15 @@ async def update(nvd_api_key=None):
     if not UPDATE_SUCCESS:
         return False
 
+    cpe_infos = []
+    for task in finished_tasks:
+        for cpe_triple in task.result()[0]:
+            cpe_infos.append(cpe_triple)
+    cpe_infos.sort(key=lambda cpe_info: cpe_info[0])
+
     with open(CPE_DICT_FILE, "w") as outfile:
-        for task in finished_tasks:
-            for cpe_triple in task.result()[0]:
-                outfile.write('%s;%s;%f\n' % (cpe_triple[0], json.dumps(cpe_triple[1]), cpe_triple[2]))
+        for cpe_info in cpe_infos:
+            outfile.write('%s;%s;%f\n' % (cpe_info[0], json.dumps(cpe_info[1]), cpe_info[2]))
 
     with open(DEPRECATED_CPES_FILE, "w") as outfile:
         final_deprecations = {}
