@@ -350,17 +350,15 @@ def _search_cpes(queries_raw, count, threshold, zero_extend_versions=False, keep
         for cpe, indirect_cpe_tf, cpe_abs in CPE_TFS:
             for query in queries:
                 query_tf, query_abs = query_infos[query]
-
-                cpe_tf, cur_cpe_relevant = {}, False
+                cpe_tf = {}
                 for term_idx, term_count in indirect_cpe_tf.items():
-                    for qterm in query_tf:
-                        if qterm.lower() == TERMS[term_idx].lower():
-                            cur_cpe_relevant = True
-                            break
-
-                    if not cur_cpe_relevant:
-                        break
                     cpe_tf[TERMS[term_idx]] = term_count
+
+                cur_cpe_relevant = False
+                for term in query_tf:
+                    if term in cpe_tf:
+                        cur_cpe_relevant = True
+                        break
 
                 if not cur_cpe_relevant:
                     continue
