@@ -350,9 +350,20 @@ def _search_cpes(queries_raw, count, threshold, zero_extend_versions=False, keep
         for cpe, indirect_cpe_tf, cpe_abs in CPE_TFS:
             for query in queries:
                 query_tf, query_abs = query_infos[query]
-                cpe_tf = {}
+
+                cpe_tf, cur_cpe_relevant = {}, False
                 for term_idx, term_count in indirect_cpe_tf.items():
+                    for qterm in query_tf:
+                        if qterm.lower() == TERMS[term_idx].lower():
+                            cur_cpe_relevant = True
+                            break
+
+                    if not cur_cpe_relevant:
+                        break
                     cpe_tf[TERMS[term_idx]] = term_count
+
+                if not cur_cpe_relevant:
+                    continue
 
                 intersecting_words = set(cpe_tf.keys()) & set(query_tf.keys())
                 inner_product = sum([cpe_tf[w] * query_tf[w] for w in intersecting_words])
@@ -391,6 +402,15 @@ def _search_cpes(queries_raw, count, threshold, zero_extend_versions=False, keep
 
                 for query in queries:
                     query_tf, query_abs = query_infos[query]
+
+                    cur_cpe_relevant = False
+                    for term in query_tf:
+                        if term.lower() in line.lower():
+                            cur_cpe_relevant = True
+                            break
+                    if not cur_cpe_relevant:
+                        continue
+
                     intersecting_words = set(cpe_tf.keys()) & set(query_tf.keys())
                     inner_product = sum([cpe_tf[w] * query_tf[w] for w in intersecting_words])
 
@@ -681,6 +701,10 @@ if __name__ == "__main__":
 
     if args.queries:
         results = search_cpes(args.queries, args.count)
+
+        if not results:
+            print()
+            print(results)
 
         for i, query in enumerate(results):
             if not SILENT and i > 0:
