@@ -357,8 +357,6 @@ def _search_cpes(queries_raw, count, threshold, zero_extend_versions=False):
                 cpe_base = ':'.join(cpe.split(':')[:5]) + ':'
                 if sim_score > most_similar[query][0][1]:
                     most_similar[query] = [(cpe, sim_score)] + most_similar[query][:count-1]
-                elif len(most_similar[query]) < count and not most_similar[query][0][0].startswith(cpe_base):
-                    most_similar[query].append((cpe, sim_score))
                 elif not most_similar[query][0][0].startswith(cpe_base):
                     insert_idx = None
                     for i, (cur_cpe, cur_sim_score) in enumerate(most_similar[query][1:]):
@@ -367,7 +365,10 @@ def _search_cpes(queries_raw, count, threshold, zero_extend_versions=False):
                                 insert_idx = i+1
                             break
                     if insert_idx:
-                        most_similar[query] = most_similar[query][:insert_idx] + [(cpe, sim_score)] + most_similar[query][insert_idx:-1]
+                        if len(most_similar[query]) < count:
+                            most_similar[query] = most_similar[query][:insert_idx] + [(cpe, sim_score)] + most_similar[query][insert_idx:]
+                        else:
+                            most_similar[query] = most_similar[query][:insert_idx] + [(cpe, sim_score)] + most_similar[query][insert_idx:-1]
 
 
     # create intermediate results (including any additional queries)
