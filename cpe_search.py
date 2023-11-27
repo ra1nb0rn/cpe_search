@@ -9,7 +9,7 @@ import re
 import sqlite3
 import string
 import sys
-import threading
+import time
 
 
 try:  # use ujson if available
@@ -187,12 +187,21 @@ async def update(nvd_api_key=None):
     # initial first request, also to set parameters
     offset = 0
     params = {'resultsPerPage': API_CPE_RESULTS_PER_PAGE, 'startIndex': offset}
-    try:
-        cpe_api_data_page = requests.get(url=CPE_API_URL, headers=headers, params=params)
-    except Exception as e:
-        print('Got the following exception when downloading CPE data via API: %s' % str(e))
+    numTotalResults = -1
+    exception = ''
+    for _ in range(3):
+        try:
+            cpe_api_data_page = requests.get(url=CPE_API_URL, headers=headers, params=params)
+            numTotalResults = cpe_api_data_page.json().get('totalResults', -1)
+            if numTotalResults > -1:
+                break
+        except Exception as e:  # e.g. json.decoder.JSONDecodeError
+            exception = e
+        time.sleep(1)
+
+    if numTotalResults == -1:
+        print('Got the following exception when downloading CPE data via API: %s' % str(exception))
         return False
-    numTotalResults = cpe_api_data_page.json().get('totalResults')
 
     # make necessary amount of API requests to pull all CPE data
     requestno = 0
