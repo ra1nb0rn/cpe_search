@@ -86,5 +86,14 @@ class TestSearches(unittest.TestCase):
         self.assertEqual(result[query][0][0], test_best_match_cpe)
         self.assertEqual(str(result[query][0][1]), test_best_match_score)
 
+    def test_search_blackice_agent_for_server_30(self):
+        self.maxDiff = None
+        query = 'BlackIce Agent for Server 3.0'
+        test_best_match_cpe = 'cpe:2.3:a:iss:blackice_agent_for_server:3.0:*:*:*:*:*:*:*'
+        test_best_match_score = '0.9128709291752767'
+        result = search_cpes(queries=[query])
+        self.assertEqual(result[query][0][0], test_best_match_cpe)
+        self.assertEqual(str(result[query][0][1]), test_best_match_score)
+
 if __name__ == '__main__':
     unittest.main()

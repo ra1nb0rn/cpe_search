@@ -2,6 +2,7 @@
 
 import argparse
 from collections import Counter
+from itertools import chain
 import math
 import os
 import pprint
@@ -429,19 +430,25 @@ def _search_cpes(queries_raw, count, threshold, zero_extend_versions=False, keep
                 all_cpe_entry_ids.append(eid)
 
     # iterate over all retrieved CPE infos and find best matching CPEs for queries
-    if not all_cpe_entry_ids:
-        iterator = []
-
-    param_in_str = ('?,' * len(all_cpe_entry_ids))[:-1]
-    if keep_data_in_memory:
-        db_query = 'SELECT cpe, term_frequencies, abs_term_frequency FROM cpe_entries WHERE entry_id IN (%s)' % param_in_str
-        cpe_infos = db_cursor.execute(db_query, all_cpe_entry_ids).fetchall()
-        relevant_cpe_infos = cpe_infos
-        iterator = relevant_cpe_infos
-    else:
-        db_query = 'SELECT cpe, term_frequencies, abs_term_frequency FROM cpe_entries WHERE entry_id IN (%s)' % param_in_str
-        db_cursor.execute(db_query, all_cpe_entry_ids)
-        iterator = db_cursor
+    iterator = []
+    max_results_per_query = 250000
+    remaining = len(all_cpe_entry_ids)
+    while remaining > 0:
+        if remaining > max_results_per_query:
+            count_params_in_str = max_results_per_query
+        else:
+            count_params_in_str = remaining
+        param_in_str = ('?,' * count_params_in_str)[:-1]
+        if keep_data_in_memory:
+            db_query = 'SELECT cpe, term_frequencies, abs_term_frequency FROM cpe_entries WHERE entry_id IN (%s)' % param_in_str
+            cpe_infos = db_cursor.execute(db_query, all_cpe_entry_ids[remaining-count_params_in_str:remaining]).fetchall()
+            relevant_cpe_infos = cpe_infos
+            iterator = chain(iterator, relevant_cpe_infos)
+        else:
+            db_query = 'SELECT cpe, term_frequencies, abs_term_frequency FROM cpe_entries WHERE entry_id IN (%s)' % param_in_str
+            db_cursor.execute(db_query, all_cpe_entry_ids[remaining-count_params_in_str:remaining])
+            iterator = chain(iterator, db_cursor)
+        remaining -= max_results_per_query
 
     for cpe_info in iterator:
         cpe, cpe_tf, cpe_abs = cpe_info
