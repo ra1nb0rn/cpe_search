@@ -296,7 +296,7 @@ async def update(nvd_api_key=None):
     return True
 
 
-def _get_alternative_queries(init_queries, zero_extend_versions=False):
+def _get_alternative_queries(init_queries):
     alt_queries_mapping = {}
     for query in init_queries:
         alt_queries_mapping[query] = []
@@ -341,11 +341,10 @@ def _get_alternative_queries(init_queries, zero_extend_versions=False):
             pot_alt_query += char
 
         # zero extend versions, e.g. 'Apache httpd 2.4' --> 'Apache httpd 2.4.0'
-        if zero_extend_versions:
-            version_match = VERSION_MATCH_ZE_RE.search(query)
-            if version_match:
-                alt_query = query.replace(version_match.group(0), version_match.group(0) + '.0')
-                alt_queries_mapping[query].append(alt_query)
+        version_match = VERSION_MATCH_ZE_RE.search(query)
+        if version_match:
+            alt_query = query.replace(version_match.group(0), version_match.group(0) + '.0')
+            alt_queries_mapping[query].append(alt_query)
 
         pot_alt_query_parts = pot_alt_query.split()
         for i in range(len(pot_alt_query_parts)):
@@ -369,7 +368,7 @@ def init_memdb():
         DB_CONN_FILE.close()
 
 
-def _search_cpes(queries_raw, count, threshold, zero_extend_versions=False, keep_data_in_memory=False):
+def _search_cpes(queries_raw, count, threshold, keep_data_in_memory=False):
     """Facilitate CPE search as specified by the program arguments"""
 
     def words_in_line(words, line):
@@ -384,7 +383,7 @@ def _search_cpes(queries_raw, count, threshold, zero_extend_versions=False, keep
     queries = [query.lower() for query in queries_raw]
 
     # add alternative queries to improve retrieval
-    alt_queries_mapping = _get_alternative_queries(queries, zero_extend_versions)
+    alt_queries_mapping = _get_alternative_queries(queries)
     for alt_queries in alt_queries_mapping.values():
         queries += alt_queries
 
@@ -631,14 +630,14 @@ def get_all_cpes(keep_data_in_memory=False):
     return cpes
 
 
-def search_cpes(queries, count=3, threshold=-1, zero_extend_versions=False, keep_data_in_memory=False):
+def search_cpes(queries, count=3, threshold=-1, keep_data_in_memory=False):
     if not queries:
         return {}
 
     if isinstance(queries, str):
         queries = [queries]
 
-    return _search_cpes(queries, count, threshold, zero_extend_versions, keep_data_in_memory)
+    return _search_cpes(queries, count, threshold, keep_data_in_memory)
 
 
 if __name__ == "__main__":
