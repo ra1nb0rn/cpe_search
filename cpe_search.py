@@ -25,6 +25,7 @@ CPE_DATABASE_FILE = os.path.join(SCRIPT_DIR, "cpe-search-dictionary.db3")
 DEPRECATED_CPES_FILE = os.path.join(SCRIPT_DIR, "deprecated-cpes.json")
 DB_URI, DB_CONN_MEM = 'file:cpedb?mode=memory&cache=shared', None
 TEXT_TO_VECTOR_RE = re.compile(r"[\w+\.]+")
+CPE_TERM_WEIGHT_EXP_FACTOR = -0.08
 GET_ALL_CPES_RE = re.compile(r'(.*);.*;.*')
 VERSION_MATCH_ZE_RE = re.compile(r'\b([\d]+\.?){1,4}\b')
 VERSION_MATCH_CPE_CREATION_RE = re.compile(r'\b((\d+[\.\-]?){1,4}([a-z\d]{0,3})?)[^\w]*$')
@@ -116,16 +117,40 @@ def perform_calculations(cpes, requestno):
 
     cpe_info = []
     for cpe in cpes:
+        # prepare CPE and its name for computation of cosine similarity values
         cpe_mod = cpe.split(';')[0].replace("_", ":").replace("*", "").replace("\\", "")
         cpe_name = cpe.split(';')[1].lower()
-        cpe_name_elems = [word for word in cpe_name.split()]
         cpe_elems = [cpe_part for cpe_part in cpe_mod[10:].split(':') if cpe_part != ""]
-        words = TEXT_TO_VECTOR_RE.findall(" ".join(cpe_elems + cpe_name_elems))
-        cpe_tf = Counter(words)
+        cpe_name_elems = [word for word in cpe_name.split()]
+
+        # compute term weights with exponential decay according to word position
+        words_cpe = TEXT_TO_VECTOR_RE.findall(' '.join(cpe_elems))
+        words_cpe_name = TEXT_TO_VECTOR_RE.findall(' '.join(cpe_name_elems))
+        word_weights_cpe = {}
+        for i, word in enumerate(words_cpe):
+            if word not in word_weights_cpe:  # always use greatest weight
+                word_weights_cpe[word] = math.exp(CPE_TERM_WEIGHT_EXP_FACTOR * i)
+
+        word_weights_cpe_name = {}
+        for i, word in enumerate(words_cpe_name):
+            if word not in word_weights_cpe_name:  # always use greatest weight
+                word_weights_cpe_name[word] = math.exp(CPE_TERM_WEIGHT_EXP_FACTOR * i)
+
+        # compute CPE entry's cosine vector for similarity comparison
+        cpe_tf = Counter(words_cpe + words_cpe_name)
         for term, tf in cpe_tf.items():
             cpe_tf[term] = tf / len(cpe_tf)
+            if term in word_weights_cpe and term in word_weights_cpe_name:
+                # average both obtained weights from CPE itself and its name
+                cpe_tf[term] *= 0.5 * word_weights_cpe[term] + 0.5 * word_weights_cpe_name[term]
+            elif term in word_weights_cpe:
+                cpe_tf[term] *= word_weights_cpe[term]
+            elif term in word_weights_cpe_name:
+                cpe_tf[term] *= word_weights_cpe_name[term]
+
         cpe_abs = math.sqrt(sum([cnt**2 for cnt in cpe_tf.values()]))
         cpe_info.append((cpe.split(';')[0].lower(), cpe_tf, cpe_abs))
+
     return cpe_info
 
 
