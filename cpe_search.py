@@ -377,12 +377,6 @@ def _get_alternative_queries(init_queries):
                         cur_char_class = '!"#$%&\'()*+,-./:;<=>?@[\]^_`{|}~'
             pot_alt_query += char
 
-        # zero extend versions, e.g. 'Apache httpd 2.4' --> 'Apache httpd 2.4.0'
-        version_match = VERSION_MATCH_ZE_RE.search(query)
-        if version_match:
-            alt_query = query.replace(version_match.group(0), version_match.group(0) + '.0')
-            alt_queries_mapping[query].append(alt_query)
-
         pot_alt_query_parts = pot_alt_query.split()
         for i in range(len(pot_alt_query_parts)):
             if pot_alt_query_parts[i][-1] in ('.', '-', '+'):
@@ -391,6 +385,12 @@ def _get_alternative_queries(init_queries):
 
         if pot_alt_query != query.strip():
             alt_queries_mapping[query].append(pot_alt_query)
+
+        # zero extend versions, e.g. 'Apache httpd 2.4' --> 'Apache httpd 2.4.0'
+        version_match = VERSION_MATCH_ZE_RE.search(query)
+        if version_match:
+            alt_queries_mapping[query].append(query.replace(version_match.group(0), version_match.group(0) + '.0'))
+            alt_queries_mapping[query].append(query.replace(version_match.group(0), version_match.group(0) + '.0.0'))
 
     return alt_queries_mapping
 
