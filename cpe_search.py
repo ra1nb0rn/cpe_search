@@ -78,8 +78,8 @@ async def api_request(headers, params, requestno):
             except Exception as e:
                 if UPDATE_SUCCESS and not SILENT:
                     print('Got the following exception when downloading CPE data via API: %s' % str(e))
-                UPDATE_SUCCESS = False
-                return None
+    UPDATE_SUCCESS = False
+    return None
 
 
 def intermediate_process(api_data, requestno):
@@ -200,7 +200,7 @@ async def update(nvd_api_key=None):
         time.sleep(1)
 
     if numTotalResults == -1:
-        print('Got the following exception when downloading CPE data via API: %s' % str(exception))
+        print('Got the following exception when getting CPE count data via API: %s' % str(exception))
         return False
 
     # make necessary amount of API requests to pull all CPE data
@@ -263,9 +263,9 @@ async def update(nvd_api_key=None):
         if not entry_ids:
             continue
 
-        i = 0
+        i = 1
         entry_ids_str = str(entry_ids[0])
-        while i < len(entry_ids) - 1:
+        while i < len(entry_ids):
             start_i = i
             while (i < len(entry_ids) - 1) and entry_ids[i] + 1 == entry_ids[i+1]:
                 i += 1
@@ -370,14 +370,6 @@ def init_memdb():
 
 def _search_cpes(queries_raw, count, threshold, keep_data_in_memory=False):
     """Facilitate CPE search as specified by the program arguments"""
-
-    def words_in_line(words, line):
-        """ Function to check if any one of 'words' is contained in 'line' """
-
-        for word in words:
-            if word in line:
-                return True
-        return False
 
     # create term frequencies and normalization factors for all queries
     queries = [query.lower() for query in queries_raw]
