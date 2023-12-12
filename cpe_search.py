@@ -306,13 +306,50 @@ def _get_alternative_queries(init_queries):
             alt_query = query.replace('httpd', 'http')
             alt_queries_mapping[query].append(alt_query)
 
+        # check for citrix 'adc' abbreviation
         if 'citrix' in query and (query.startswith('adc ') or query.endswith(' adc') or ' adc ' in query):
             alt_query = query.replace('adc', 'application delivery controller')
             alt_queries_mapping[query].append(alt_query)
 
+        # check for dell 'omsa' abbreviation
         if 'dell' in query and (query.startswith('omsa ') or query.endswith(' omsa') or ' omsa ' in query):
             alt_query = query.replace('omsa', 'openmanage server administrator')
             alt_queries_mapping[query].append(alt_query)
+
+        # fix bootstrap CPE naming
+        if 'bootstrap' in query and 'getbootstrap' not in query:
+            alt_queries_mapping[query].append(query + ' getbootstrap')
+
+        # check for different variants of js library names, e.g. 'moment.js' vs. 'momentjs' vs. 'moment js'
+        if 'js ' in query or ' js' in query or query.endswith('js'):
+            words = query.split()
+            alt_queries = []
+            for i, word in enumerate(words):
+                word = word.strip()
+                new_query_words1, new_query_words2 = [], []
+                if word == 'js' and i > 0:
+                    new_query_words1 = words[:i-1] + [words[i-1] + 'js']
+                    new_query_words2 = words[:i-1] + [words[i-1] + '.js']
+                elif word.endswith('.js') or word.endswith('js'):
+                    if i > 0:
+                        new_query_words1 += words[:i]
+                        new_query_words2 += words[:i]
+                    if word.endswith('.js'):
+                        new_query_words1 += [word[:-len('.js')]] + ['js']
+                        new_query_words2 += [word[:-len('.js')] + 'js']
+                    else:
+                        new_query_words1 += [word[:-len('js')]] + ['js']
+                        new_query_words2 += [word[:-len('js')] + '.js']
+
+                if new_query_words1:
+                    if i < len(words) - 1:
+                        new_query_words1 += words[i+1:]
+                        new_query_words2 += words[i+1:]
+                    alt_queries.append(' '.join(new_query_words1))
+                    alt_queries.append(' '.join(new_query_words2))
+
+            if alt_queries:
+                alt_queries_mapping[query] += alt_queries
 
         # split certain version parts with space, e.g. 'openssh 7.4p1' --> 'openssh 7.4 p1'
         pot_alt_query = ''
