@@ -44,14 +44,24 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Search for CPEs using software names and titles -- Created by Dustin Born (ra1nb0rn)")
     parser.add_argument("-u", "--update", action="store_true", help="Update the local CPE database")
     parser.add_argument("-k", "--api-key", type=str, help="NVD API key to use for updating the local CPE dictionary")
-    parser.add_argument("-c", "--count", default=3, type=int, help="The number of CPEs to show in the similarity overview (default: 3)")
+    parser.add_argument("-n", "--number", default=3, type=int, help="The number of CPEs to show in the similarity overview (default: 3)")
     parser.add_argument("-q", "--query", dest="queries", metavar="QUERY", action="append", help="A query, i.e. textual software name / title like 'Apache 2.4.39' or 'Wordpress 5.7.2'")
     parser.add_argument("-v", "--verbose", action="store_true", help="Be verbose and print status information")
+    parser.add_argument("-c", "--config", type=str, help="A config file to use, e.g. config.json")
 
     args = parser.parse_args()
     if not args.update and not args.queries:
         parser.print_help()
     return args
+
+
+def _get_cpe_database_file(config):
+    """Return CPE database file to use"""
+
+    cpe_database_file = CPE_DATABASE_FILE
+    if config and config.get('CPE_DATABASE_FILE', ''):
+        cpe_database_file = config['CPE_DATABASE_FILE']
+    return cpe_database_file
 
 
 async def api_request(headers, params, requestno):
@@ -182,7 +192,7 @@ async def worker(headers, params, requestno, rate_limit):
         return None
 
 
-async def update(nvd_api_key=None):
+async def update(nvd_api_key=None, config=None):
     '''Pulls current CPE data via the CPE API for an initial database build'''
 
     # import required modules in case they haven't been imported yet
@@ -197,6 +207,8 @@ async def update(nvd_api_key=None):
 
     if not nvd_api_key:
         nvd_api_key = os.getenv('NVD_API_KEY')
+        if (not nvd_api_key) and config:
+            nvd_api_key = config.get('NVD_API_KEY', None)
 
     if nvd_api_key:
         if not SILENT:
@@ -253,9 +265,10 @@ async def update(nvd_api_key=None):
     cpe_infos.sort(key=lambda cpe_info: cpe_info[0])
 
     # open CPE database and create tables
-    if os.path.isfile(CPE_DATABASE_FILE):
-        os.remove(CPE_DATABASE_FILE)
-    db_conn = sqlite3.connect(CPE_DATABASE_FILE)
+    cpe_database_file = _get_cpe_database_file(config)
+    if os.path.isfile(cpe_database_file):
+        os.remove(cpe_database_file)
+    db_conn = sqlite3.connect(cpe_database_file)
     db_cursor = db_conn.cursor()
     db_cursor.execute('''CREATE TABLE terms_to_entries (
                             term TEXT PRIMARY KEY,
@@ -306,7 +319,11 @@ async def update(nvd_api_key=None):
     db_conn.close()
 
     # create CPE deprecations file
-    with open(DEPRECATED_CPES_FILE, "w") as outfile:
+    deprecated_cpes_file = DEPRECATED_CPES_FILE
+    if config and config.get('DEPRECATED_CPES_FILE', ''):
+        deprecated_cpes_file = config['DEPRECATED_CPES_FILE']
+
+    with open(deprecated_cpes_file, "w") as outfile:
         final_deprecations = {}
         for task in finished_tasks:
             for deprecation in task.result()[1]:
@@ -420,17 +437,18 @@ def _get_alternative_queries(init_queries):
     return alt_queries_mapping
 
 
-def init_memdb():
+def init_memdb(config=None):
     global DB_CONN_MEM
 
     if DB_CONN_MEM is None:
-        DB_CONN_FILE = sqlite3.connect(CPE_DATABASE_FILE)
+        cpe_database_file = _get_cpe_database_file(config)
+        DB_CONN_FILE = sqlite3.connect(cpe_database_file)
         DB_CONN_MEM = sqlite3.connect(DB_URI, uri=True)
         DB_CONN_FILE.backup(DB_CONN_MEM)
         DB_CONN_FILE.close()
 
 
-def _search_cpes(queries_raw, count, threshold, keep_data_in_memory=False):
+def _search_cpes(queries_raw, count, threshold, keep_data_in_memory=False, config=None):
     """Facilitate CPE search as specified by the program arguments"""
 
     # create term frequencies and normalization factors for all queries
@@ -459,7 +477,8 @@ def _search_cpes(queries_raw, count, threshold, keep_data_in_memory=False):
         conn = sqlite3.connect(DB_URI, uri=True)
         db_cursor = conn.cursor()
     else:
-        conn = sqlite3.connect(CPE_DATABASE_FILE, uri=True)
+        cpe_database_file = _get_cpe_database_file(config)
+        conn = sqlite3.connect(cpe_database_file, uri=True)
         db_cursor = conn.cursor()
 
     # figure out which CPE infos are relevant, based on the terms of all queries
@@ -592,7 +611,7 @@ def is_cpe_equal(cpe1, cpe2):
     return True
 
 
-def match_cpe23_to_cpe23_from_dict(cpe23_in, keep_data_in_memory=False):
+def match_cpe23_to_cpe23_from_dict(cpe23_in, keep_data_in_memory=False, config=None):
     """
     Try to return a valid CPE 2.3 string that exists in the NVD's CPE
     dictionary based on the given, potentially badly formed, CPE string.
@@ -613,7 +632,7 @@ def match_cpe23_to_cpe23_from_dict(cpe23_in, keep_data_in_memory=False):
         if pre_cpe_in.endswith(':') or pre_cpe_in.count(':') > 9:  # skip rear parts in fixing process
             continue
 
-        all_cpes = get_all_cpes(keep_data_in_memory)
+        all_cpes = get_all_cpes(keep_data_in_memory, config)
         for cpe in all_cpes:
             if cpe23_in == cpe:
                 return cpe23_in
@@ -669,13 +688,14 @@ def create_base_cpe_if_versionless_query(cpe, query):
     return None
 
 
-def get_all_cpes(keep_data_in_memory=False):
+def get_all_cpes(keep_data_in_memory=False, config=None):
     if keep_data_in_memory:
         init_memdb()
         conn = sqlite3.connect(DB_URI, uri=True)
         db_cursor = conn.cursor()
     else:
-        conn = sqlite3.connect(CPE_DATABASE_FILE, uri=True)
+        cpe_database_file = _get_cpe_database_file(config)
+        conn = sqlite3.connect(cpe_database_file, uri=True)
         db_cursor = conn.cursor()
 
     cpes = db_cursor.execute('SELECT cpe FROM cpe_entries').fetchall()
@@ -684,14 +704,14 @@ def get_all_cpes(keep_data_in_memory=False):
     return cpes
 
 
-def search_cpes(queries, count=3, threshold=-1, keep_data_in_memory=False):
+def search_cpes(queries, count=3, threshold=-1, keep_data_in_memory=False, config=None):
     if not queries:
         return {}
 
     if isinstance(queries, str):
         queries = [queries]
 
-    return _search_cpes(queries, count, threshold, keep_data_in_memory)
+    return _search_cpes(queries, count, threshold, keep_data_in_memory, config)
 
 
 if __name__ == "__main__":
@@ -702,11 +722,17 @@ if __name__ == "__main__":
         SILENT = False
 
     perform_update = False
-
     if args.update:
         perform_update = True
 
-    if args.queries and not os.path.isfile(CPE_DATABASE_FILE):
+    if args.config:
+        with open(args.config) as f:
+            config = json.loads(f.read())
+    else:
+        config = {}
+
+    cpe_database_file = _get_cpe_database_file(config)
+    if args.queries and not os.path.isfile(cpe_database_file):
         if not SILENT:
             print("[+] Running initial setup (might take a couple of minutes)", file=sys.stderr)
         perform_update = True
@@ -719,13 +745,13 @@ if __name__ == "__main__":
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        loop.run_until_complete(update(args.api_key))
+        loop.run_until_complete(update(args.api_key, config))
 
         if not UPDATE_SUCCESS:
             print('[-] Failed updating the local CPE database!')
 
     if args.queries:
-        results = search_cpes(args.queries, args.count)
+        results = search_cpes(args.queries, args.number, False, config)
 
         if not results:
             print()
