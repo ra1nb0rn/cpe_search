@@ -27,7 +27,7 @@ TEXT_TO_VECTOR_RE = re.compile(r"[\w+\.]+")
 CPE_TERM_WEIGHT_EXP_FACTOR = -0.08
 GET_ALL_CPES_RE = re.compile(r'(.*);.*;.*')
 VERSION_MATCH_ZE_RE = re.compile(r'\b([\d]+\.?){1,4}\b')
-VERSION_MATCH_CPE_CREATION_RE = re.compile(r'\b((\d+[\.\-]?){1,4}([a-z\d]{0,3})?)[^\w]*$')
+VERSION_MATCH_CPE_CREATION_RE = re.compile(r'\b((\d[\da-zA-Z\.]{0,6})([\+\-\.\_][\da-zA-Z\.]+){0,4})[^\w\n]*$')
 TERMS = []
 TERMS_MAP = {}
 ALT_QUERY_MAXSPLIT = 1
@@ -343,6 +343,20 @@ async def update(nvd_api_key=None, config=None):
     return True
 
 
+def get_possible_versions_in_query(query):
+    version_parts = []
+    version_str_match = VERSION_MATCH_CPE_CREATION_RE.search(query)
+    if version_str_match:
+        full_version_str = version_str_match.group(1).strip()
+        version_parts.append(full_version_str)
+        version_parts += re.split(r'[\+\-\_]', full_version_str)
+
+        # remove first element in case of duplicate
+        if len(version_parts) > 1 and version_parts[0] == version_parts[1]:
+            version_parts = version_parts[1:]
+    return version_parts
+
+
 def _get_alternative_queries(init_queries):
     alt_queries_mapping = {}
     for query in init_queries:
@@ -398,7 +412,14 @@ def _get_alternative_queries(init_queries):
             if alt_queries:
                 alt_queries_mapping[query] += alt_queries
 
-        # split certain version parts with space, e.g. 'openssh 7.4p1' --> 'openssh 7.4 p1'
+        # check for a version containing a commit-ID, date, etc.
+        version_parts = get_possible_versions_in_query(query)
+        if len(version_parts) > 1:  # first item is always the entire version string
+            query_no_version = query.replace(version_parts[0], '')
+            alt_queries_mapping[query].append(query_no_version + ' '.join(version_parts[1:]))
+
+        # split version parts with different character groups by a space,
+        # e.g. 'openssh 7.4p1' --> 'openssh 7.4 p1'
         pot_alt_query = ''
         cur_char_class = string.ascii_letters
         did_split, seen_first_break = False, False
@@ -671,17 +692,16 @@ def match_cpe23_to_cpe23_from_dict(cpe23_in, keep_data_in_memory=False, config=N
     return ''
 
 
-def create_cpe_from_base_cpe_and_query(cpe, query):
-    version_str_match = VERSION_MATCH_CPE_CREATION_RE.search(query)
-    if version_str_match:
-        version_str = version_str_match.group(1).strip()
-
+def create_cpes_from_base_cpe_and_query(cpe, query):
+    new_cpes = []
+    version_parts = get_possible_versions_in_query(query)
+    for version in version_parts:
         # always put version into the appropriate, i.e. sixth, CPE field
         cpe_parts = cpe.split(':')
-        cpe_parts[5] = version_str
-        return ':'.join(cpe_parts)
+        cpe_parts[5] = version
+        new_cpes.append(':'.join(cpe_parts))
 
-    return None
+    return new_cpes
 
 
 def is_versionless_query(query):
