@@ -25,6 +25,7 @@ DEFAULT_CONFIG_FILE = os.path.join(SCRIPT_DIR, 'config.json')
 DB_URI, DB_CONN_MEM = 'file:cpedb?mode=memory&cache=shared', None
 TEXT_TO_VECTOR_RE = re.compile(r"[\w+\.]+")
 CPE_TERM_WEIGHT_EXP_FACTOR = -0.08
+QUERY_TERM_WEIGHT_EXP_FACTOR = -0.25
 GET_ALL_CPES_RE = re.compile(r'(.*);.*;.*')
 VERSION_MATCH_ZE_RE = re.compile(r'\b([\d]+\.?){1,4}\b')
 VERSION_MATCH_CPE_CREATION_RE = re.compile(r'\b((\d[\da-zA-Z\.]{0,6})([\+\-\.\_][\da-zA-Z\.]+){0,4})[^\w\n]*$')
@@ -382,19 +383,19 @@ def _get_alternative_queries(init_queries):
             alt_queries_mapping[query].append(query + ' getbootstrap')
 
         # check for different variants of js library names, e.g. 'moment.js' vs. 'momentjs' vs. 'moment js'
+        query_words = query.split()
         if 'js ' in query or ' js' in query or query.endswith('js'):
-            words = query.split()
             alt_queries = []
-            for i, word in enumerate(words):
+            for i, word in enumerate(query_words):
                 word = word.strip()
                 new_query_words1, new_query_words2 = [], []
                 if word == 'js' and i > 0:
-                    new_query_words1 = words[:i-1] + [words[i-1] + 'js']
-                    new_query_words2 = words[:i-1] + [words[i-1] + '.js']
+                    new_query_words1 = query_words[:i-1] + [query_words[i-1] + 'js']
+                    new_query_words2 = query_words[:i-1] + [query_words[i-1] + '.js']
                 elif word.endswith('.js') or word.endswith('js'):
                     if i > 0:
-                        new_query_words1 += words[:i]
-                        new_query_words2 += words[:i]
+                        new_query_words1 += query_words[:i]
+                        new_query_words2 += query_words[:i]
                     if word.endswith('.js'):
                         new_query_words1 += [word[:-len('.js')]] + ['js']
                         new_query_words2 += [word[:-len('.js')] + 'js']
@@ -403,9 +404,9 @@ def _get_alternative_queries(init_queries):
                         new_query_words2 += [word[:-len('js')] + '.js']
 
                 if new_query_words1:
-                    if i < len(words) - 1:
-                        new_query_words1 += words[i+1:]
-                        new_query_words2 += words[i+1:]
+                    if i < len(query_words) - 1:
+                        new_query_words1 += query_words[i+1:]
+                        new_query_words2 += query_words[i+1:]
                     alt_queries.append(' '.join(new_query_words1))
                     alt_queries.append(' '.join(new_query_words2))
 
@@ -452,7 +453,16 @@ def _get_alternative_queries(init_queries):
         pot_alt_query = ' '.join(pot_alt_query_parts)
 
         if pot_alt_query != query.strip():
-            alt_queries_mapping[query].append(pot_alt_query)
+            alt_queries_mapping[query].append(pot_alt_query)  # w/o including orig query words
+            for word in query.split():
+                if word not in pot_alt_query:
+                    pot_alt_query += ' ' + word
+            alt_queries_mapping[query].append(pot_alt_query)  # w/ including orig query words
+
+        # add alt query in case likely subversion is split from main version by a space
+        if len(query_words) > 2 and len(query_words[-1]) < 7:
+            alt_queries_mapping[query].append(query + ' ' + query_words[-2] + query_words[-1])
+            alt_queries_mapping[query].append(' '.join(query_words[:-2]) + ' ' + query_words[-2] + query_words[-1])
 
         # zero extend versions, e.g. 'Apache httpd 2.4' --> 'Apache httpd 2.4.0'
         version_match = VERSION_MATCH_ZE_RE.search(query)
@@ -494,9 +504,16 @@ def _search_cpes(queries_raw, count, threshold, keep_data_in_memory=False, confi
     most_similar = {}
     all_query_words = set()
     for query in queries:
-        query_tf = Counter(TEXT_TO_VECTOR_RE.findall(query))
+        words_query = TEXT_TO_VECTOR_RE.findall(query)
+        word_weights_query = {}
+        for i, word in enumerate(words_query):
+            if word not in word_weights_query:
+                word_weights_query[word] = math.exp(QUERY_TERM_WEIGHT_EXP_FACTOR * i)
+
+        # compute query's cosine vector for similarity comparison
+        query_tf = Counter(words_query)
         for term, tf in query_tf.items():
-            query_tf[term] = tf / len(query_tf)
+            query_tf[term] = word_weights_query[term] * (tf / len(query_tf))
         all_query_words |= set(query_tf.keys())
         query_abs = math.sqrt(sum([cnt**2 for cnt in query_tf.values()]))
         query_infos[query] = (query_tf, query_abs)
