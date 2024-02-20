@@ -382,6 +382,10 @@ def _get_alternative_queries(init_queries):
         if 'bootstrap' in query and 'getbootstrap' not in query:
             alt_queries_mapping[query].append(query + ' getbootstrap')
 
+        # fix that a query for Flask probably means THE flask
+        if 'flask' in query and 'palletsprojects' not in query:
+            alt_queries_mapping[query].append(query + ' palletsprojects')
+
         # check for different variants of js library names, e.g. 'moment.js' vs. 'momentjs' vs. 'moment js'
         query_words = query.split()
         if 'js ' in query or ' js' in query or query.endswith('js'):
