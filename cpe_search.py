@@ -28,7 +28,7 @@ CPE_TERM_WEIGHT_EXP_FACTOR = -0.08
 QUERY_TERM_WEIGHT_EXP_FACTOR = -0.25
 GET_ALL_CPES_RE = re.compile(r'(.*);.*;.*')
 VERSION_MATCH_ZE_RE = re.compile(r'\b([\d]+\.?){1,4}\b')
-VERSION_MATCH_CPE_CREATION_RE = re.compile(r'\b((\d[\da-zA-Z\.]{0,6})([\+\-\.\_\~][\da-zA-Z\.]+){0,4})[^\w\n]*$')
+VERSION_MATCH_CPE_CREATION_RE = re.compile(r'\b((\d[\da-zA-Z\.]{0,6})([\+\-\.\_\~ ][\da-zA-Z\.]+){0,4})[^\w\n]*$')
 TERMS = []
 TERMS_MAP = {}
 ALT_QUERY_MAXSPLIT = 1
@@ -350,7 +350,7 @@ def get_possible_versions_in_query(query):
     if version_str_match:
         full_version_str = version_str_match.group(1).strip()
         version_parts.append(full_version_str)
-        version_parts += re.split(r'[\+\-\_]', full_version_str)
+        version_parts += re.split(r'[\+\-\_\~ ]', full_version_str)
 
         # remove first element in case of duplicate
         if len(version_parts) > 1 and version_parts[0] == version_parts[1]:
@@ -716,10 +716,26 @@ def match_cpe23_to_cpe23_from_dict(cpe23_in, keep_data_in_memory=False, config=N
 def create_cpes_from_base_cpe_and_query(cpe, query):
     new_cpes = []
     version_parts = get_possible_versions_in_query(query)
-    for version in version_parts:
-        # always put version into the appropriate, i.e. sixth, CPE field
+
+    # create CPEs where version parts are put into subsequent CPE fields
+    if len(version_parts) > 2:
+        for i in range(1, len(version_parts)):
+            cpe_parts = cpe.split(':')
+            cpe_parts = cpe_parts[:5] + version_parts[1:i+1] + cpe_parts[5 + i:]
+            new_cpes.append(':'.join(cpe_parts))
+
+    # check whether a subversion part (starting at seventh CPE field) is already in CPE ...
+    version_part_in_cpe = False
+    for i, version in enumerate(version_parts[2:]):
         cpe_parts = cpe.split(':')
-        cpe_parts[5] = version
+        if version in cpe_parts[6+i:]:
+            version_part_in_cpe = True
+            break
+
+    # ... and if not, create CPE where the detected version string is entirely put into the sixth CPE field
+    if version_parts and not version_part_in_cpe:
+        cpe_parts = cpe.split(':')
+        cpe_parts[5] = version_parts[0].replace(' ', '_')
         new_cpes.append(':'.join(cpe_parts))
 
     return new_cpes
