@@ -6,11 +6,14 @@ import math
 import os
 import pprint
 import re
-import sqlite3
 import string
 import sys
 import time
 
+try:
+    from database_wrapper_functions import *
+except:
+    from .database_wrapper_functions import *
 
 try:  # use ujson if available
     import ujson as json
@@ -56,17 +59,26 @@ def parse_args():
 
 
 def _load_config(config_file=DEFAULT_CONFIG_FILE):
-    config = {}
-    with open(config_file) as f:  # default: config.json
-        config_raw = json.loads(f.read())
-        for key, val in config_raw.items():
-            if 'file' in key.lower():
+    '''Load config from file'''
+
+    def load_config_dict(_dict, db_type):
+        config = {}
+        for key, val in _dict.items():
+            if isinstance(val, dict):
+                val = load_config_dict(val, db_type=_dict['DATABASE']['TYPE'])
+            elif 'file' in key.lower() or (db_type == 'sqlite' and key.lower() == 'database_name'):
                 if not os.path.isabs(val):
                     if val != os.path.expanduser(val):  # home-relative path was given
                         val = os.path.expanduser(val)
                     else:
                         val = os.path.join(os.path.dirname(os.path.abspath(config_file)), val)
             config[key] = val
+        return config
+
+    with open(config_file) as f:  # default: config.json
+        config_raw = json.loads(f.read())
+        config = load_config_dict(config_raw, db_type=config_raw['DATABASE']['TYPE'])
+
     return config
 
 
@@ -273,22 +285,32 @@ async def update(nvd_api_key=None, config=None):
             cpe_infos.append(cpe_triple)
     cpe_infos.sort(key=lambda cpe_info: cpe_info[0])
 
-    # open CPE database and create tables
-    if os.path.isfile(config['CPE_DATABASE_FILE']):
-        os.remove(config['CPE_DATABASE_FILE'])
-    os.makedirs(os.path.dirname(config['CPE_DATABASE_FILE']), exist_ok=True)
-    db_conn = sqlite3.connect(config['CPE_DATABASE_FILE'])
+    db_type = config['DATABASE']['TYPE']
+    db_name = config['DATABASE_NAME']
+    if os.path.isfile(db_name):
+        os.remove(db_name)
+    if db_type == 'sqlite':
+        os.makedirs(os.path.dirname(db_name), exist_ok=True)
+
+    # get connection
+    try:
+        db_conn = get_database_connection(config['DATABASE'], db_name)
+    except:
+        db_conn = get_database_connection(config['DATABASE'], '')
     db_cursor = db_conn.cursor()
-    db_cursor.execute('''CREATE TABLE terms_to_entries (
-                            term TEXT PRIMARY KEY,
-                            entry_ids TEXT NOT NULL
-                      );''')
-    db_cursor.execute('''CREATE TABLE cpe_entries (
-                            entry_id INTEGER PRIMARY KEY,
-                            cpe TEXT,
-                            term_frequencies TEXT,
-                            abs_term_frequency REAL
-                      );''')
+
+    if db_type == 'mariadb':
+        db_cursor.execute(f'CREATE OR REPLACE DATABASE {db_name};')
+        db_cursor.execute(f'use {db_name};')
+        # set max_table_size for memory tables
+        db_cursor.execute('SET GLOBAL max_heap_table_size = 8589934592;')
+        db_cursor.execute('SET GLOBAL tmp_table_size = 8589934592;')
+
+    # create tables
+    with open(config['CREATE_SQL_STATEMENTS_FILE']) as f:
+        create_sql_statements = json.loads(f.read())
+    db_cursor.execute(create_sql_statements['TABLES']['CPE_ENTRIES'][db_type])
+    db_cursor.execute(create_sql_statements['TABLES']['TERMS_TO_ENTRIES'][db_type])
     db_conn.commit()
     db_cursor.close()
     db_cursor = db_conn.cursor()
@@ -324,6 +346,10 @@ async def update(nvd_api_key=None, config=None):
         db_cursor.execute('INSERT INTO terms_to_entries VALUES (?, ?)', (term, entry_ids_str))
 
     db_conn.commit()
+    if config['DATABASE']['TYPE'] == 'mariadb':
+        # reset max_table_size for memory tables 
+        db_cursor.execute('SET GLOBAL max_heap_table_size = 16777216;')
+        db_cursor.execute('SET GLOBAL tmp_table_size = 16777216;')
     db_cursor.close()
     db_conn.close()
 
@@ -491,7 +517,7 @@ def init_memdb(config=None):
         config = _load_config()
 
     if DB_CONN_MEM is None:
-        DB_CONN_FILE = sqlite3.connect(config['CPE_DATABASE_FILE'])
+        DB_CONN_FILE = sqlite3.connect(config['DATABASE_NAME'])
         DB_CONN_MEM = sqlite3.connect(DB_URI, uri=True)
         DB_CONN_FILE.backup(DB_CONN_MEM)
         DB_CONN_FILE.close()
@@ -531,23 +557,26 @@ def _search_cpes(queries_raw, count, threshold, keep_data_in_memory=False, confi
         most_similar[query] = [("N/A", -1)]
 
     # set up DB connector
-    if keep_data_in_memory:
+    if keep_data_in_memory and config['DATABASE']['TYPE'] == 'sqlite':
         init_memdb(config)
         conn = sqlite3.connect(DB_URI, uri=True)
-        db_cursor = conn.cursor()
     else:
-        conn = sqlite3.connect(config['CPE_DATABASE_FILE'], uri=True)
-        db_cursor = conn.cursor()
+        cpe_database_name = config['DATABASE_NAME']
+        conn = get_database_connection(config['DATABASE'], cpe_database_name, uri=True)
 
     # figure out which CPE infos are relevant, based on the terms of all queries
     all_cpe_entry_ids = []
     for word in all_query_words:
+        db_cursor = conn.cursor()
         # query can only return one result, b/c term is PK
         db_query = 'SELECT entry_ids FROM terms_to_entries WHERE term = ?'
-        cpe_entry_ids = db_cursor.execute(db_query, (word, )).fetchall()
-        if not cpe_entry_ids or not cpe_entry_ids[0]:
+        db_cursor.execute(db_query, (word, ))
+        if not db_cursor:
             continue
 
+        cpe_entry_ids = db_cursor.fetchall()
+        if not cpe_entry_ids:
+            continue
         cpe_entry_ids = cpe_entry_ids[0][0].split(',')
         all_cpe_entry_ids.append(int(cpe_entry_ids[0]))
 
@@ -564,6 +593,7 @@ def _search_cpes(queries_raw, count, threshold, keep_data_in_memory=False, confi
     remaining = len(all_cpe_entry_ids)
     is_one_iter_enough = remaining <= max_results_per_query
     while remaining > 0:
+        db_cursor = conn.cursor()
         if remaining > max_results_per_query:
             count_params_in_str = max_results_per_query
         else:
@@ -571,7 +601,10 @@ def _search_cpes(queries_raw, count, threshold, keep_data_in_memory=False, confi
         param_in_str = ('?,' * count_params_in_str)[:-1]
         if keep_data_in_memory or not is_one_iter_enough:
             db_query = 'SELECT cpe, term_frequencies, abs_term_frequency FROM cpe_entries WHERE entry_id IN (%s)' % param_in_str
-            cpe_infos = db_cursor.execute(db_query, all_cpe_entry_ids[remaining-count_params_in_str:remaining]).fetchall()
+            db_cursor.execute(db_query, all_cpe_entry_ids[remaining-count_params_in_str:remaining])
+            cpe_infos = []
+            if db_cursor:
+                cpe_infos = db_cursor.fetchall()
             iterator += cpe_infos
         else:
             db_query = 'SELECT cpe, term_frequencies, abs_term_frequency FROM cpe_entries WHERE entry_id IN (%s)' % param_in_str
@@ -774,11 +807,11 @@ def get_all_cpes(keep_data_in_memory=False, config=None):
         conn = sqlite3.connect(DB_URI, uri=True)
         db_cursor = conn.cursor()
     else:
-        conn = sqlite3.connect(config['CPE_DATABASE_FILE'], uri=True)
+        conn = get_database_connection(config['DATABASE'], config['DATABASE_NAME'], uri=True)
         db_cursor = conn.cursor()
 
-    cpes = db_cursor.execute('SELECT cpe FROM cpe_entries').fetchall()
-    cpes = [cpe[0] for cpe in cpes]
+    db_cursor.execute('SELECT cpe FROM cpe_entries')
+    cpes = [cpe[0] for cpe in db_cursor]
 
     return cpes
 
@@ -808,7 +841,7 @@ if __name__ == "__main__":
         perform_update = True
 
     config = _load_config(args.config)
-    if args.queries and not os.path.isfile(config['CPE_DATABASE_FILE']):
+    if args.queries and not os.path.isfile(config['DATABASE_NAME']):
         if not SILENT:
             print("[+] Running initial setup (might take a couple of minutes)", file=sys.stderr)
         perform_update = True
