@@ -378,6 +378,13 @@ def _get_alternative_queries(init_queries):
             alt_query = query.replace('omsa', 'openmanage server administrator')
             alt_queries_mapping[query].append(alt_query)
 
+        # check for Cisco 'CM' and 'SME' abbreviations
+        if 'cisco' in query and (query.startswith('cm ') or query.endswith(' cm') or ' cm ' in query):
+            alt_query = query.replace('cm', 'communications manager')
+            if 'sm' in query:
+                alt_query = alt_query.replace('sm', 'session management')
+            alt_queries_mapping[query].append(alt_query)
+
         # fix bootstrap CPE naming
         if 'bootstrap' in query and 'getbootstrap' not in query:
             alt_queries_mapping[query].append(query + ' getbootstrap')
