@@ -681,12 +681,12 @@ def match_cpe23_to_cpe23_from_dict(cpe23_in, keep_data_in_memory=False, config=N
             pot_new_cpe += ':*'
 
     pre_cpe_in = cpe23_in
+    all_cpes = get_all_cpes(keep_data_in_memory, config)
     while pre_cpe_in.count(':') > 3:  # break if next cpe part would be vendor part
         pre_cpe_in = pre_cpe_in[:-1]
         if pre_cpe_in.endswith(':') or pre_cpe_in.count(':') > 9:  # skip rear parts in fixing process
             continue
 
-        all_cpes = get_all_cpes(keep_data_in_memory, config)
         for cpe in all_cpes:
             if cpe23_in == cpe:
                 return cpe23_in
