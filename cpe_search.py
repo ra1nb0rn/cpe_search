@@ -26,6 +26,7 @@ SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CPE_API_URL = "https://services.nvd.nist.gov/rest/json/cpes/2.0/"
 DEFAULT_CONFIG_FILE = os.path.join(SCRIPT_DIR, 'config.json')
 DB_URI, DB_CONN_MEM = 'file:cpedb?mode=memory&cache=shared', None
+CONNECTION_POOL_SIZE = os.cpu_count() # should be equal to number of cpu cores? (https://dba.stackexchange.com/a/305726)
 TEXT_TO_VECTOR_RE = re.compile(r"[\w+\.]+")
 CPE_TERM_WEIGHT_EXP_FACTOR = -0.08
 QUERY_TERM_WEIGHT_EXP_FACTOR = -0.25
@@ -302,9 +303,11 @@ async def update(nvd_api_key=None, config=None):
     if db_type == 'mariadb':
         db_cursor.execute(f'CREATE OR REPLACE DATABASE {db_name};')
         db_cursor.execute(f'use {db_name};')
+        # set query cache
+        db_cursor.execute('SET GLOBAL query_cache_size = ?;', (config['DATABASE']['QUERY_CACHE_SIZE'],))
         # set max_table_size for memory tables
         db_cursor.execute('SET GLOBAL max_heap_table_size = 8589934592;')
-        db_cursor.execute('SET GLOBAL tmp_table_size = 8589934592;')
+        db_cursor.execute('SET GLOBAL tmp_table_size = 10737418240;')
 
     # create tables
     with open(config['CREATE_SQL_STATEMENTS_FILE']) as f:
@@ -346,10 +349,6 @@ async def update(nvd_api_key=None, config=None):
         db_cursor.execute('INSERT INTO terms_to_entries VALUES (?, ?)', (term, entry_ids_str))
 
     db_conn.commit()
-    if config['DATABASE']['TYPE'] == 'mariadb':
-        # reset max_table_size for memory tables 
-        db_cursor.execute('SET GLOBAL max_heap_table_size = 16777216;')
-        db_cursor.execute('SET GLOBAL tmp_table_size = 16777216;')
     db_cursor.close()
     db_conn.close()
 
@@ -516,11 +515,28 @@ def init_memdb(config=None):
     if not config:
         config = _load_config()
 
-    if DB_CONN_MEM is None:
-        DB_CONN_FILE = sqlite3.connect(config['DATABASE_NAME'])
-        DB_CONN_MEM = sqlite3.connect(DB_URI, uri=True)
-        DB_CONN_FILE.backup(DB_CONN_MEM)
-        DB_CONN_FILE.close()
+    if config['DATABASE']['TYPE'] == 'sqlite':
+        if DB_CONN_MEM is None:
+            DB_CONN_FILE = sqlite3.connect(config['DATABASE_NAME'])
+            DB_CONN_MEM = sqlite3.connect(DB_URI, uri=True)
+            DB_CONN_FILE.backup(DB_CONN_MEM)
+            DB_CONN_FILE.close()
+        return sqlite3.connect(DB_URI, uri=True)
+    else:
+        if DB_CONN_MEM is None:
+            conn_params = {
+                'user': config['DATABASE']['USER'],
+                'password': config['DATABASE']['PASSWORD'],
+                'host': config['DATABASE']['HOST'],
+                'port': config['DATABASE']['PORT'],
+                'database': config['DATABASE_NAME']
+            }
+            DB_CONN_MEM = mariadb.ConnectionPool(pool_name="cpe_search_pool", pool_size=CONNECTION_POOL_SIZE, **conn_params)
+        try:
+            return DB_CONN_MEM.get_connection()
+        except:
+            # no connection in pool available
+            return get_database_connection(config['DATABASE'], config['DATABASE_NAME'])
 
 
 def _search_cpes(queries_raw, count, threshold, keep_data_in_memory=False, config=None):
@@ -557,12 +573,10 @@ def _search_cpes(queries_raw, count, threshold, keep_data_in_memory=False, confi
         most_similar[query] = [("N/A", -1)]
 
     # set up DB connector
-    if keep_data_in_memory and config['DATABASE']['TYPE'] == 'sqlite':
-        init_memdb(config)
-        conn = sqlite3.connect(DB_URI, uri=True)
+    if keep_data_in_memory:
+        conn = init_memdb(config)
     else:
-        cpe_database_name = config['DATABASE_NAME']
-        conn = get_database_connection(config['DATABASE'], cpe_database_name, uri=True)
+        conn = get_database_connection(config['DATABASE'], config['DATABASE_NAME'], uri=True)
 
     # figure out which CPE infos are relevant, based on the terms of all queries
     all_cpe_entry_ids = []
@@ -685,6 +699,10 @@ def _search_cpes(queries_raw, count, threshold, keep_data_in_memory=False, confi
                 if not most_similar or intermediate_results[alt_query][0][1] > most_similar[0][1]:
                     most_similar = intermediate_results[alt_query]
             results[query_raw] = most_similar
+
+    # close cursor and connection afterwards
+    db_cursor.close()
+    conn.close()
 
     return results
 
