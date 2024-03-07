@@ -303,11 +303,6 @@ async def update(nvd_api_key=None, config=None):
     if db_type == 'mariadb':
         db_cursor.execute(f'CREATE OR REPLACE DATABASE {db_name};')
         db_cursor.execute(f'use {db_name};')
-        # set query cache
-        db_cursor.execute('SET GLOBAL query_cache_size = ?;', (config['DATABASE']['QUERY_CACHE_SIZE'],))
-        # set max_table_size for memory tables
-        db_cursor.execute('SET GLOBAL max_heap_table_size = 8589934592;')
-        db_cursor.execute('SET GLOBAL tmp_table_size = 10737418240;')
 
     # create tables
     with open(config['CREATE_SQL_STATEMENTS_FILE']) as f:
@@ -603,7 +598,7 @@ def _search_cpes(queries_raw, count, threshold, keep_data_in_memory=False, confi
 
     # iterate over all retrieved CPE infos and find best matching CPEs for queries
     iterator = []
-    max_results_per_query = 250000
+    max_results_per_query = 1000
     remaining = len(all_cpe_entry_ids)
     is_one_iter_enough = remaining <= max_results_per_query
     while remaining > 0:
@@ -818,7 +813,7 @@ def create_base_cpe_if_versionless_query(cpe, query):
 def get_all_cpes(keep_data_in_memory=False, config=None):
 
     if not config:
-        config = _load_config
+        config = _load_config()
 
     if keep_data_in_memory:
         init_memdb()
