@@ -1,0 +1,12 @@
+{
+    "TABLES": {
+        "CPE_ENTRIES": {
+            "sqlite": "CREATE TABLE cpe_entries (entry_id INTEGER PRIMARY KEY, cpe VARCHAR(255), term_frequencies TEXT, abs_term_frequency REAL);",
+            "mariadb": "CREATE OR REPLACE TABLE cpe_entries (entry_id INTEGER, cpe VARCHAR(255) CHARACTER SET utf8, term_frequencies VARCHAR(600), abs_term_frequency REAL, PRIMARY KEY (entry_id));"
+        },
+        "TERMS_TO_ENTRIES": {
+            "sqlite": "CREATE TABLE terms_to_entries (term VARCHAR(255) PRIMARY KEY, entry_ids TEXT NOT NULL);",
+            "mariadb": "CREATE OR REPLACE TABLE terms_to_entries (term VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin, entry_ids MEDIUMTEXT CHARACTER SET ascii NOT NULL, PRIMARY KEY (term));"
+        }
+    }
+}

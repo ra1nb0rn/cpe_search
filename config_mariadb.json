@@ -1,0 +1,12 @@
+{
+    "DATABASE_NAME": "cpe_search_dictionary",
+    "DEPRECATED_CPES_FILE": "deprecated-cpes.json",
+    "NVD_API_KEY": "",
+    "DATABASE":{
+        "TYPE": "mariadb",
+        "HOST": "localhost",
+        "USER": "search_vulns",
+        "PASSWORD": "",
+        "PORT": 3306
+    }
+}
