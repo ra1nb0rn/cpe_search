@@ -27,8 +27,6 @@ SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CPE_API_URL = "https://services.nvd.nist.gov/rest/json/cpes/2.0/"
 DEFAULT_CONFIG_FILE = os.path.join(SCRIPT_DIR, 'config.json')
 CREATE_SQL_STATEMENTS_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'create_sql_statements.json')
-DB_URI, DB_CONN_MEM = 'file:cpedb?mode=memory&cache=shared', None
-CONNECTION_POOL_SIZE = os.cpu_count() # should be equal to number of cpu cores? (https://dba.stackexchange.com/a/305726)
 TEXT_TO_VECTOR_RE = re.compile(r"[\w+\.]+")
 CPE_TERM_WEIGHT_EXP_FACTOR = -0.08
 QUERY_TERM_WEIGHT_EXP_FACTOR = -0.25
@@ -511,37 +509,7 @@ def _get_alternative_queries(init_queries):
     return alt_queries_mapping
 
 
-def init_memdb(config=None):
-    global DB_CONN_MEM
-
-    if not config:
-        config = _load_config()
-
-    if config['DATABASE']['TYPE'] == 'sqlite':
-        if DB_CONN_MEM is None:
-            DB_CONN_FILE = sqlite3.connect(config['DATABASE_NAME'])
-            DB_CONN_MEM = sqlite3.connect(DB_URI, uri=True)
-            DB_CONN_FILE.backup(DB_CONN_MEM)
-            DB_CONN_FILE.close()
-        return sqlite3.connect(DB_URI, uri=True)
-    else:
-        if DB_CONN_MEM is None:
-            conn_params = {
-                'user': config['DATABASE']['USER'],
-                'password': config['DATABASE']['PASSWORD'],
-                'host': config['DATABASE']['HOST'],
-                'port': config['DATABASE']['PORT'],
-                'database': config['DATABASE_NAME']
-            }
-            DB_CONN_MEM = mariadb.ConnectionPool(pool_name="cpe_search_pool", pool_size=CONNECTION_POOL_SIZE, **conn_params)
-        try:
-            return DB_CONN_MEM.get_connection()
-        except:
-            # no connection in pool available
-            return get_database_connection(config['DATABASE'], config['DATABASE_NAME'])
-
-
-def _search_cpes(queries_raw, count, threshold, keep_data_in_memory=False, config=None):
+def _search_cpes(queries_raw, count, threshold, config=None):
     """Facilitate CPE search as specified by the program arguments"""
 
     if not config:
@@ -575,10 +543,7 @@ def _search_cpes(queries_raw, count, threshold, keep_data_in_memory=False, confi
         most_similar[query] = [("N/A", -1)]
 
     # set up DB connector
-    if keep_data_in_memory:
-        conn = init_memdb(config)
-    else:
-        conn = get_database_connection(config['DATABASE'], config['DATABASE_NAME'], uri=True)
+    conn = get_database_connection(config['DATABASE'], config['DATABASE_NAME'])
 
     # figure out which CPE infos are relevant, based on the terms of all queries
     all_cpe_entry_ids = []
@@ -720,7 +685,7 @@ def is_cpe_equal(cpe1, cpe2):
     return True
 
 
-def match_cpe23_to_cpe23_from_dict(cpe23_in, keep_data_in_memory=False, config=None):
+def match_cpe23_to_cpe23_from_dict(cpe23_in, config=None):
     """
     Try to return a valid CPE 2.3 string that exists in the NVD's CPE
     dictionary based on the given, potentially badly formed, CPE string.
@@ -739,7 +704,7 @@ def match_cpe23_to_cpe23_from_dict(cpe23_in, keep_data_in_memory=False, config=N
             pot_new_cpe += ':*'
 
     pre_cpe_in = cpe23_in
-    all_cpes = get_all_cpes(keep_data_in_memory, config)
+    all_cpes = get_all_cpes(config)
     while pre_cpe_in.count(':') > 3:  # break if next cpe part would be vendor part
         pre_cpe_in = pre_cpe_in[:-1]
         if pre_cpe_in.endswith(':') or pre_cpe_in.count(':') > 9:  # skip rear parts in fixing process
@@ -815,15 +780,12 @@ def create_base_cpe_if_versionless_query(cpe, query):
     return None
 
 
-def get_all_cpes(keep_data_in_memory=False, config=None):
+def get_all_cpes(config=None):
 
     if not config:
         config = _load_config()
 
-    if keep_data_in_memory:
-        conn = init_memdb(config)
-    else:
-        conn = get_database_connection(config['DATABASE'], config['DATABASE_NAME'], uri=True)
+    conn = get_database_connection(config['DATABASE'], config['DATABASE_NAME'])
     db_cursor = conn.cursor()
 
     db_cursor.execute('SELECT cpe FROM cpe_entries')
@@ -832,7 +794,7 @@ def get_all_cpes(keep_data_in_memory=False, config=None):
     return cpes
 
 
-def search_cpes(queries, count=3, threshold=-1, keep_data_in_memory=False, config=None):
+def search_cpes(queries, count=3, threshold=-1, config=None):
     if not queries:
         return {}
 
@@ -842,7 +804,7 @@ def search_cpes(queries, count=3, threshold=-1, keep_data_in_memory=False, confi
     if isinstance(queries, str):
         queries = [queries]
 
-    return _search_cpes(queries, count, threshold, keep_data_in_memory, config)
+    return _search_cpes(queries, count, threshold, config)
 
 
 if __name__ == "__main__":
@@ -857,7 +819,7 @@ if __name__ == "__main__":
         perform_update = True
 
     config = _load_config(args.config)
-    if args.queries and not os.path.isfile(config['DATABASE_NAME']):
+    if args.queries and config['DATABASE']['TYPE'] == 'sqlite' and not os.path.isfile(config['DATABASE_NAME']):
         if not SILENT:
             print("[+] Running initial setup (might take a couple of minutes)", file=sys.stderr)
         perform_update = True
@@ -876,7 +838,7 @@ if __name__ == "__main__":
             print('[-] Failed updating the local CPE database!')
 
     if args.queries:
-        results = search_cpes(args.queries, args.number, -1, False, config)
+        results = search_cpes(args.queries, args.number, -1, config)
 
         if not results:
             print()
