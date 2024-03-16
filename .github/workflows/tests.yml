@@ -23,5 +23,7 @@ jobs:
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: NVD_API_KEY=$NVD_API_KEY python3 cpe_search.py -u
-      - name: Run test cases
-        run: python3 test.py
+      - name: Test matching CPEs
+        run: python3 test_cpes.py
+      - name: Test CPE suggestions
+        run: python3 test_cpe_suggestions.py

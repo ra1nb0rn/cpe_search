@@ -33,6 +33,8 @@ QUERY_TERM_WEIGHT_EXP_FACTOR = -0.25
 GET_ALL_CPES_RE = re.compile(r'(.*);.*;.*')
 VERSION_MATCH_ZE_RE = re.compile(r'\b([\d]+\.?){1,4}\b')
 VERSION_MATCH_CPE_CREATION_RE = re.compile(r'\b((\d[\da-zA-Z\.]{0,6})([\+\-\.\_\~ ][\da-zA-Z\.]+){0,4})[^\w\n]*$')
+MATCH_CPE_23_RE = re.compile(r'cpe:2\.3:[aoh](:[^:]+){2,10}')
+CPE_SEARCH_THRESHOLD_ALT = 0.25
 TERMS = []
 TERMS_MAP = {}
 ALT_QUERY_MAXSPLIT = 1
@@ -573,7 +575,6 @@ def _search_cpes(queries_raw, count, threshold, config=None):
     # limiting number of max_results_per_query boosts performance of MariaDB
     max_results_per_query = 1000
     remaining = len(all_cpe_entry_ids)
-    is_one_iter_enough = remaining <= max_results_per_query
 
     db_cursor = conn.cursor()
     while remaining > 0:
@@ -592,8 +593,15 @@ def _search_cpes(queries_raw, count, threshold, config=None):
     if os.environ.get('IS_CPE_SEARCH_TEST', 'false') == 'true':
         all_cpe_infos = sorted(all_cpe_infos)
 
+    processed_cpes = set()
     for cpe_info in all_cpe_infos:
         cpe, cpe_tf, cpe_abs = cpe_info
+
+        # all_cpe_infos may contain duplicates
+        if cpe in processed_cpes:
+            continue
+        processed_cpes.add(cpe)
+
         cpe_tf = json.loads(cpe_tf)
         cpe_abs = float(cpe_abs)
 
@@ -794,17 +802,107 @@ def get_all_cpes(config=None):
     return cpes
 
 
-def search_cpes(queries, count=3, threshold=-1, config=None):
-    if not queries:
-        return {}
+def search_cpes(query, count=3, threshold=-1, config=None):
+    if not query:
+        return {'cpes': [], 'pot_cpes': []}
 
     if not config:
         config = _load_config()
 
-    if isinstance(queries, str):
-        queries = [queries]
+    query = query.strip()
+    cpes, pot_cpes = [], []
 
-    return _search_cpes(queries, count, threshold, config)
+    if not MATCH_CPE_23_RE.match(query):
+        cpes = _search_cpes([query], count=count, threshold=CPE_SEARCH_THRESHOLD_ALT, config=config)
+        cpes = cpes.get(query, [])
+
+        if not cpes:
+            return {'cpes': [], 'pot_cpes': []}
+
+        # always create related queries with supplied version number
+        for cpe, sim in cpes:
+            new_cpes = create_cpes_from_base_cpe_and_query(cpe, query)
+            for new_cpe in new_cpes:
+                # do not overwrite sim score of an existing CPE
+                if any(is_cpe_equal(new_cpe, existing_cpe[0]) for existing_cpe in cpes):
+                    continue
+                # only add CPE if it was not seen before
+                if new_cpe and not any(is_cpe_equal(new_cpe, other[0]) for other in pot_cpes):
+                    pot_cpes.append((new_cpe, -1))
+
+            if not any(is_cpe_equal(cpe, other[0]) for other in pot_cpes):
+                pot_cpes.append((cpe, sim))
+
+        # always create related queries without version number if query is versionless
+        versionless_cpe_inserts, new_idx = [], 0
+        for cpe, _ in pot_cpes:
+            base_cpe = create_base_cpe_if_versionless_query(cpe, query)
+            if base_cpe:
+                if ((not any(is_cpe_equal(base_cpe, other[0]) for other in pot_cpes)) and
+                        not any(is_cpe_equal(base_cpe, other[0][0]) for other in versionless_cpe_inserts)):
+                    versionless_cpe_inserts.append(((base_cpe, -1), new_idx))
+                    new_idx += 1
+            new_idx += 1
+
+        for new_cpe, idx in versionless_cpe_inserts:
+            pot_cpes.insert(idx, new_cpe)
+
+        # catch bad CPE matches
+        bad_match = False
+        check_str = cpes[0][0][8:]
+
+        # ensure that the retrieved CPE has a number if query has a number
+        if any(char.isdigit() for char in query) and not any(char.isdigit() for char in check_str):
+            bad_match = True
+
+        # if a version number is clearly detectable in query, ensure this version is somewhat reflected in the CPE
+        versions_in_query = get_possible_versions_in_query(query)
+        if not bad_match:
+            cpe_has_matching_version = False
+            for possible_version in versions_in_query:
+                # ensure version has at least two parts to avoid using a short version for checking
+                if '.' not in possible_version:
+                    continue
+
+                idx_pos_ver, idx_check_str = 0, 0
+                while idx_pos_ver < len(possible_version) and idx_check_str < len(check_str):
+                    while idx_pos_ver < len(possible_version) and not possible_version[idx_pos_ver].isdigit():
+                        idx_pos_ver += 1
+                    if idx_pos_ver < len(possible_version) and possible_version[idx_pos_ver] == check_str[idx_check_str]:
+                        idx_pos_ver += 1
+                    idx_check_str += 1
+
+                if idx_pos_ver == len(possible_version):
+                    cpe_has_matching_version = True
+                    break
+            if not cpe_has_matching_version:
+                bad_match = True
+
+        if bad_match:
+            if cpes[0][1] > threshold:
+                return {'cpes': [], 'pot_cpes': pot_cpes}
+            return {'cpes': [], 'pot_cpes': cpes}
+
+        # also catch bad match if query is versionless, but retrieved CPE is not
+        cpe_version = cpes[0][0].split(':')[5] if cpes[0][0].count(':') > 5 else ""
+        if cpe_version not in ('*', '-'):
+            base_cpe = create_base_cpe_if_versionless_query(cpes[0][0], query)
+            if base_cpe:
+                # remove CPEs from related queries that have a version
+                pot_cpes_versionless = []
+                for _, (pot_cpe, score) in enumerate(pot_cpes):
+                    cpe_version_iter = pot_cpe.split(':')[5] if pot_cpe.count(':') > 5 else ""
+                    if cpe_version_iter in ('', '*', '-'):
+                        pot_cpes_versionless.append((pot_cpe, score))
+
+                return {'cpes': [], 'pot_cpes': pot_cpes_versionless}
+
+        if cpes[0][1] < threshold:
+            cpes = []
+    else:
+        pot_cpes = []
+
+    return {'cpes': cpes, 'pot_cpes': pot_cpes}
 
 
 if __name__ == "__main__":
@@ -838,7 +936,9 @@ if __name__ == "__main__":
             print('[-] Failed updating the local CPE database!')
 
     if args.queries:
-        results = search_cpes(args.queries, args.number, -1, config)
+        results = {}
+        for query in args.queries:
+            results[query] = search_cpes(query, args.number, -1, config).get('cpes', [])
 
         if not results:
             print()
@@ -848,6 +948,11 @@ if __name__ == "__main__":
             if not SILENT and i > 0:
                 print()
 
-            print(results[query][0][0])
-            if not SILENT:
-                pprint.pprint(results[query])
+            if results[query]:
+                print(results[query][0][0])
+                if not SILENT:
+                    pprint.pprint(results[query])
+            else:
+                print('Could not find software for query: %s' % query)
+                if not SILENT:
+                    pprint.pprint([])
