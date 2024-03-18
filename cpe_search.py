@@ -875,7 +875,7 @@ def search_cpes(query, count=3, threshold=-1, config=None):
                 if idx_pos_ver == len(possible_version):
                     cpe_has_matching_version = True
                     break
-            if not cpe_has_matching_version:
+            if versions_in_query and not cpe_has_matching_version:
                 bad_match = True
 
         if bad_match:
