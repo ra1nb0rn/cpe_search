@@ -550,8 +550,8 @@ def _search_cpes(queries_raw, count, threshold, config=None):
 
     # figure out which CPE infos are relevant, based on the terms of all queries
     all_cpe_entry_ids = []
+    db_cursor = conn.cursor()
     for word in all_query_words:
-        db_cursor = conn.cursor()
         # query can only return one result, b/c term is PK
         db_query = 'SELECT entry_ids FROM terms_to_entries WHERE term = ?'
         db_cursor.execute(db_query, (word, ))
@@ -577,7 +577,6 @@ def _search_cpes(queries_raw, count, threshold, config=None):
     max_results_per_query = 1000
     remaining = len(all_cpe_entry_ids)
 
-    db_cursor = conn.cursor()
     while remaining > 0:
         count_params_in_str = min(remaining, max_results_per_query)
         param_in_str = ('?,' * count_params_in_str)[:-1]
@@ -815,6 +814,8 @@ def get_all_cpes(config=None):
 
     db_cursor.execute('SELECT cpe FROM cpe_entries')
     cpes = [cpe[0] for cpe in db_cursor]
+    db_cursor.close()
+    conn.close()
 
     return cpes
 
