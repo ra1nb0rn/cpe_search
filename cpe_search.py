@@ -33,6 +33,7 @@ QUERY_TERM_WEIGHT_EXP_FACTOR = -0.25
 GET_ALL_CPES_RE = re.compile(r'(.*);.*;.*')
 VERSION_MATCH_ZE_RE = re.compile(r'\b([\d]+\.?){1,4}\b')
 VERSION_MATCH_CPE_CREATION_RE = re.compile(r'\b((\d[\da-zA-Z\.]{0,6})([\+\-\.\_\~ ][\da-zA-Z\.]+){0,4})[^\w\n]*$')
+VERSION_SPLIT_DIFF_CHARSETS_RE = re.compile(r'(?<=\d)(?=[^\d.])')
 MATCH_CPE_23_RE = re.compile(r'cpe:2\.3:[aoh](:[^:]+){2,10}')
 CPE_SEARCH_THRESHOLD_ALT = 0.25
 TERMS = []
@@ -755,6 +756,22 @@ def create_cpes_from_base_cpe_and_query(cpe, query):
             cpe_parts = cpe_parts[:5] + version_parts[1:i+1] + cpe_parts[5 + i:]
             new_cpes.append(':'.join(cpe_parts))
 
+    # check if there is only one complex version without a distinct seperator
+    # and if so put the two parts into the proper CPE fields (e.g. 10.4p18 --> 10.4 p18)
+    if len(version_parts) == 1:
+        complex_version_match = VERSION_SPLIT_DIFF_CHARSETS_RE.search(version_parts[0])
+        if complex_version_match:
+            split_idx = complex_version_match.start()
+            ver_part1 = version_parts[0][:split_idx]
+            ver_part2 = version_parts[0][split_idx:]
+            while ver_part2 and not ver_part2[0].isalnum():
+                ver_part2 = ver_part2[1:]
+            if ver_part2:
+                cpe_parts = cpe.split(':')
+                cpe_parts[5] = ver_part1
+                cpe_parts[6] = ver_part2
+                new_cpes.append(':'.join(cpe_parts))
+
     # check whether a subversion part (starting at seventh CPE field) is already in CPE ...
     version_part_in_cpe = False
     for i, version in enumerate(version_parts[2:]):
@@ -881,7 +898,13 @@ def search_cpes(query, count=3, threshold=-1, config=None):
         if bad_match:
             if cpes[0][1] > threshold:
                 return {'cpes': [], 'pot_cpes': pot_cpes}
-            return {'cpes': [], 'pot_cpes': cpes}
+            else:
+                # filter out completely irrelevant CPEs
+                new_pot_cpes = []
+                for pot_cpe in pot_cpes:
+                    if any(word in query for word in pot_cpe[0].split(':')[3:5]):
+                        new_pot_cpes.append(pot_cpe)
+                return {'cpes': [], 'pot_cpes': new_pot_cpes}
 
         # also catch bad match if query is versionless, but retrieved CPE is not
         cpe_version = cpes[0][0].split(':')[5] if cpes[0][0].count(':') > 5 else ""

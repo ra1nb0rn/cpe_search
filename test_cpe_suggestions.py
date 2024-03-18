@@ -29,7 +29,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = 'Airflow'
         result = search_cpes(query)['pot_cpes']
-        expected_related_cpes = [('cpe:2.3:a:apache:airflow:*:*:*:*:*:*:*:*', -1), ('cpe:2.3:a:apache:airflow:0.1:*:*:*:*:*:*:*', 0.574897369298862)]
+        expected_related_cpes = [('cpe:2.3:a:apache:airflow:*:*:*:*:*:*:*:*', -1), ('cpe:2.3:a:apache:airflow_cncf_kubernetes:*:*:*:*:*:*:*:*', -1)]
         for i, (expected_related_cpe, match_score) in enumerate(expected_related_cpes):
             self.assertEqual(expected_related_cpe, result[i][0])
             self.assertAlmostEqual(match_score, result[i][1])
