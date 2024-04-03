@@ -10,7 +10,7 @@ CONNECTION_POOL_SIZE = os.cpu_count() # should be equal to number of cpu cores? 
 CONNECTION_POOLS = {}
 
 
-def get_database_connection(config_database_keys, database_name):
+def get_database_connection(config_database_keys, database_name, use_pool=True):
     '''Return a database connection object, initialized with the given config'''
     database_type = config_database_keys['TYPE']
 
@@ -32,7 +32,7 @@ def get_database_connection(config_database_keys, database_name):
                     port=config_database_keys['PORT'],
                     database=database_name
                 )
-        else:
+        elif use_pool:
             conn_params = {
                 'user': config_database_keys['USER'],
                 'password': config_database_keys['PASSWORD'],
@@ -43,6 +43,14 @@ def get_database_connection(config_database_keys, database_name):
             pool = mariadb.ConnectionPool(pool_name=pool_name, pool_size=CONNECTION_POOL_SIZE, **conn_params)
             CONNECTION_POOLS[pool_name] = pool
             return get_database_connection(config_database_keys, database_name)
+        else:
+            db_conn = mariadb.connect(
+                user=config_database_keys['USER'],
+                password=config_database_keys['PASSWORD'],
+                host=config_database_keys['HOST'],
+                port=config_database_keys['PORT'],
+                database=database_name
+            )
     else:
         raise(Exception('Invalid database type %s given' % (database_type)))
     return db_conn
