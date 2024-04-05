@@ -82,7 +82,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = 'Electron 13.1.7'
         test_best_match_cpe = 'cpe:2.3:a:electronjs:electron:13.1.7:*:*:*:*:*:*:*'
-        test_best_match_score = 0.7796549134972258
+        test_best_match_score = 0.9909307528573642
         result = search_cpes(query)['cpes']
         self.assertEqual(result[0][0], test_best_match_cpe)
         self.assertAlmostEqual(result[0][1], test_best_match_score)

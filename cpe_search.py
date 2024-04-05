@@ -43,6 +43,13 @@ API_CPE_RESULTS_PER_PAGE = 10000
 UPDATE_SUCCESS = True
 SILENT = True
 DEBUG = False
+POPULAR_QUERY_CORRECTIONS = {'flask': 'palletsprojects', 'keycloak': 'redhat red hat', 'rabbitmq': 'vmware', 'bootstrap': 'getbootstrap',
+                             'kotlin': 'jetbrains', 'spring boot': 'vmware', 'debian': 'linux', 'ansible': 'redhat', 'twig': 'symfony',
+                             'proxmox ve': 'virtual environment', 'nextjs': 'vercel', 'next.js': 'vercel', 'ubuntu': 'linux',
+                             'symfony': 'sensiolabs', 'electron': 'electronjs', 'microsoft exchange': 'server'}
+QUERY_ABBREVIATIONS = {'adc': (['citrix'], 'application delivery controller'), 'omsa': (['dell'], 'openmanage server administrator'),
+                       'cdk': (['amazon', 'aws'], 'aws cdk cloud development kit'), 'srm': (['vmware'], 'site recovery manager'),
+                       'paloaltonetworks': ([], 'palo alto networks'), 'palo alto networks': ([], 'paloaltonetworks')}
 
 
 def parse_args():
@@ -396,15 +403,11 @@ def _get_alternative_queries(init_queries):
             alt_query = query.replace('httpd', 'http')
             alt_queries_mapping[query].append(alt_query)
 
-        # check for citrix 'adc' abbreviation
-        if 'citrix' in query and (query.startswith('adc ') or query.endswith(' adc') or ' adc ' in query):
-            alt_query = query.replace('adc', 'application delivery controller')
-            alt_queries_mapping[query].append(alt_query)
-
-        # check for dell 'omsa' abbreviation
-        if 'dell' in query and (query.startswith('omsa ') or query.endswith(' omsa') or ' omsa ' in query):
-            alt_query = query.replace('omsa', 'openmanage server administrator')
-            alt_queries_mapping[query].append(alt_query)
+        # check for "simple" abbreviations
+        for abbreviation, (required_keywords, replacement) in QUERY_ABBREVIATIONS.items():
+            if not required_keywords or any(keyword in query for keyword in required_keywords):
+                if query.startswith(abbreviation) or query.endswith(abbreviation) or f' {abbreviation} ' in query:
+                    alt_queries_mapping[query].append(query.replace(abbreviation, f' {replacement} '))
 
         # check for Cisco 'CM' and 'SME' abbreviations
         if 'cisco' in query and (query.startswith('cm ') or query.endswith(' cm') or ' cm ' in query):
@@ -413,13 +416,12 @@ def _get_alternative_queries(init_queries):
                 alt_query = alt_query.replace('sm', 'session management')
             alt_queries_mapping[query].append(alt_query)
 
-        # fix bootstrap CPE naming
-        if 'bootstrap' in query and 'getbootstrap' not in query:
-            alt_queries_mapping[query].append(query + ' getbootstrap')
-
-        # fix that a query for Flask probably means THE flask
-        if 'flask' in query and 'palletsprojects' not in query:
-            alt_queries_mapping[query].append(query + ' palletsprojects')
+        # fix popular queries, where the search algorithm has difficulties with sub products
+        # e.g. is the query 'flask' looking for THE 'Flask' by the PalletsProjects or the
+        # 'Flask' plugin 'Flask Caching' by 'Flask Caching Project'?
+        for product, helper_query in POPULAR_QUERY_CORRECTIONS.items():
+            if product in query and not any(word in query for word in helper_query.split(' ')):
+                alt_queries_mapping[query].append(helper_query + ' ' + query)
 
         # check for different variants of js library names, e.g. 'moment.js' vs. 'momentjs' vs. 'moment js'
         query_words = query.split()
@@ -525,6 +527,7 @@ def _search_cpes(queries_raw, count, threshold, config=None):
     alt_queries_mapping = _get_alternative_queries(queries)
     for alt_queries in alt_queries_mapping.values():
         queries += alt_queries
+    queries = list(set(queries))
 
     query_infos = {}
     most_similar = {}
@@ -543,7 +546,7 @@ def _search_cpes(queries_raw, count, threshold, config=None):
         all_query_words |= set(query_tf.keys())
         query_abs = math.sqrt(sum([cnt**2 for cnt in query_tf.values()]))
         query_infos[query] = (query_tf, query_abs)
-        most_similar[query] = [("N/A", -1)]
+        most_similar[query] = {}
 
     # set up DB connector
     conn = get_database_connection(config['DATABASE'], config['DATABASE_NAME'])
@@ -593,6 +596,11 @@ def _search_cpes(queries_raw, count, threshold, config=None):
     if os.environ.get('IS_CPE_SEARCH_TEST', 'false') == 'true':
         all_cpe_infos = sorted(all_cpe_infos)
 
+    # Search Idea: Divide and Conquer
+    # Divide all CPEs into a dict of CPE classes where only the most similar
+    # CPE for every class is stored. In the end, unify all of these most similar
+    # entries and sort them by similarity
+    # (cpe-class: base CPE + number of non-wildcard fields)
     processed_cpes = set()
     for cpe_info in all_cpe_infos:
         cpe, cpe_tf, cpe_abs = cpe_info
@@ -621,25 +629,30 @@ def _search_cpes(queries_raw, count, threshold, config=None):
                 continue
 
             cpe_base = ':'.join(cpe.split(':')[:5]) + ':'
-            if sim_score > most_similar[query][0][1]:
-                most_similar[query] = [(cpe, sim_score)] + most_similar[query][:count-1]
-            elif not most_similar[query][0][0].startswith(cpe_base):
-                insert_idx = None
-                for i, (cur_cpe, cur_sim_score) in enumerate(most_similar[query][1:]):
-                    if sim_score > cur_sim_score:
-                        if not cur_cpe.startswith(cpe_base):
-                            insert_idx = i+1
-                        break
-                if insert_idx:
-                    if len(most_similar[query]) < count:
-                        most_similar[query] = most_similar[query][:insert_idx] + [(cpe, sim_score)] + most_similar[query][insert_idx:]
-                    else:
-                        most_similar[query] = most_similar[query][:insert_idx] + [(cpe, sim_score)] + most_similar[query][insert_idx:-1]
+            cpe_class = cpe_base + '-' + str(10 - sum(cpe_field in ('*', '-', '') for cpe_field in cpe.split(':')))
+            if cpe_class not in most_similar[query] or sim_score > most_similar[query][cpe_class][1]:
+                most_similar[query][cpe_class] = (cpe, sim_score)
+
+    # unify the individual most similar results
+    for query in queries:
+        unified_most_similar = set()
+        if most_similar[query]:
+            for cpe, sim_score in most_similar[query].values():
+                unified_most_similar.add((cpe, sim_score))
+            most_similar[query] = sorted(unified_most_similar, key=lambda entry: (-entry[1], entry[0]))
+
+    # only return the number of requested CPEs (per query including alt queries)
+    if count != -1:
+        for query in queries:
+            if most_similar[query]:
+                most_similar[query] = most_similar[query][:count]
+            else:
+                most_similar[query] = []
 
     # create intermediate results (including any additional queries)
     intermediate_results = {}
     for query in queries:
-        if most_similar[query] and len(most_similar[query]) == 1 and most_similar[query][0][1] == -1:
+        if not most_similar[query] or (len(most_similar[query]) == 1 and most_similar[query][0][1] == -1):
             continue
 
         intermediate_results[query] = most_similar[query]
@@ -663,15 +676,23 @@ def _search_cpes(queries_raw, count, threshold, config=None):
         if query not in alt_queries_mapping or not alt_queries_mapping[query]:
             results[query_raw] = intermediate_results[query]
         else:
-            most_similar = None
-            if query in intermediate_results:
-                most_similar = intermediate_results[query]
-            for alt_query in alt_queries_mapping[query]:
-                if alt_query not in intermediate_results:
-                    continue
-                if not most_similar or intermediate_results[alt_query][0][1] > most_similar[0][1]:
-                    most_similar = intermediate_results[alt_query]
-            results[query_raw] = most_similar
+            unified_most_similar = set()
+            if most_similar[query]:
+                unified_most_similar = set(intermediate_results[query])
+                for alt_query in alt_queries_mapping[query]:
+                    if alt_query != query:
+                        unified_most_similar |= set(intermediate_results.get(alt_query, []))
+
+            results[query_raw] = sorted(unified_most_similar, key=lambda entry: (-entry[1], entry[0]))
+
+    # only return the number of requested CPEs for final results
+    if count != -1:
+        for query in queries_raw:
+            if results.get(query):
+                results[query] = results[query][:count]
+            else:
+                results[query] = []
+            results[query]
 
     # close cursor and connection afterwards
     db_cursor.close()

@@ -29,7 +29,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = 'Airflow'
         result = search_cpes(query)['pot_cpes']
-        expected_related_cpes = [('cpe:2.3:a:apache:airflow:*:*:*:*:*:*:*:*', -1), ('cpe:2.3:a:apache:airflow_cncf_kubernetes:*:*:*:*:*:*:*:*', -1)]
+        expected_related_cpes = [('cpe:2.3:a:apache:airflow:*:*:*:*:*:*:*:*', -1)]
         for i, (expected_related_cpe, match_score) in enumerate(expected_related_cpes):
             self.assertEqual(expected_related_cpe, result[i][0])
             self.assertAlmostEqual(match_score, result[i][1])
@@ -38,7 +38,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = 'jQuery 100.42.3'
         result = search_cpes(query)['pot_cpes']
-        expected_related_cpes = [('cpe:2.3:a:jquery:jquery:100.42.3:*:*:*:*:*:*:*', -1), ('cpe:2.3:a:jquery:jquery:-:*:*:*:*:*:*:*', 0.7889609186783934), ('cpe:2.3:a:jqueryui:jquery_ui:100.42.3:*:*:*:*:jquery:*:*', -1), ('cpe:2.3:a:jqueryui:jquery_ui:1.0:*:*:*:*:jquery:*:*', 0.6433270204106121), ('cpe:2.3:a:jqueryui:jquery_ui:1.10.0:-:*:*:*:jquery:*:*', 0.6433270204106121)]
+        expected_related_cpes = [('cpe:2.3:a:jquery:jquery:100.42.3:*:*:*:*:*:*:*', -1), ('cpe:2.3:a:jquery:jquery:-:*:*:*:*:*:*:*', 0.7889609186783934), ('cpe:2.3:a:jquery:jquery:1.0.1:*:*:*:*:*:*:*', 0.6789861763163321), ('cpe:2.3:a:jquery:jquery_ui:100.42.3:rc1:*:*:*:*:*:*', -1), ('cpe:2.3:a:jquery:jquery_ui:1.10.0:rc1:*:*:*:*:*:*', 0.6461795551396173)]
         for i, (expected_related_cpe, match_score) in enumerate(expected_related_cpes):
             self.assertEqual(expected_related_cpe, result[i][0])
             self.assertAlmostEqual(match_score, result[i][1])
@@ -47,7 +47,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = 'jfrog artifactory 4.29.0'
         result = search_cpes(query)['pot_cpes']
-        expected_related_cpes = [('cpe:2.3:a:jfrog:artifactory:4.29.0:-:*:*:*:-:*:*', -1), ('cpe:2.3:a:jfrog:artifactory:1.3.0:-:*:*:*:-:*:*', 0.7618540942296063), ('cpe:2.3:a:jfrog:artifactory:4.29.0:*:*:*:*:jenkins:*:*', -1), ('cpe:2.3:a:jfrog:artifactory:1.0.1:*:*:*:*:jenkins:*:*', 0.6728911631889697)]
+        expected_related_cpes = [('cpe:2.3:a:jfrog:artifactory:4.29.0:-:*:*:*:-:*:*', -1), ('cpe:2.3:a:jfrog:artifactory:1.3.0:-:*:*:*:-:*:*', 0.7618540942296063), ('cpe:2.3:a:jfrog:artifactory:4.29.0:beta3:*:*:*:-:*:*', -1), ('cpe:2.3:a:jfrog:artifactory:1.3.0:beta3:*:*:*:-:*:*', 0.7039954631573018)]
         for i, (expected_related_cpe, match_score) in enumerate(expected_related_cpes):
             self.assertEqual(expected_related_cpe, result[i][0])
             self.assertAlmostEqual(match_score, result[i][1])
@@ -56,7 +56,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = 'dell omsa 9.4.0.2'
         result = search_cpes(query)['pot_cpes']
-        expected_related_cpes = [('cpe:2.3:a:dell:openmanage_server_administrator:9.4.0.2:*:*:*:*:*:*:*', -1), ('cpe:2.3:a:dell:openmanage_server_administrator:5.2.0:*:*:*:*:*:*:*', 0.9356286465015572), ('cpe:2.3:a:dell:openmanage_server_administrator:1.00.0000:*:*:*:*:*:*:*', 0.8845604348848455), ('cpe:2.3:a:dell:openmanage_server_administrator_installer:9.4.0.2:*:*:*:*:*:*:*', -1), ('cpe:2.3:a:dell:openmanage_server_administrator_installer:1.0.0:*:*:*:*:*:*:*', 0.8355902246901327)]
+        expected_related_cpes = [('cpe:2.3:a:dell:openmanage_server_administrator:9.4.0.2:*:*:*:*:*:*:*', -1), ('cpe:2.3:a:dell:openmanage_server_administrator:5.2.0:*:*:*:*:*:*:*', 0.9356286465015572), ('cpe:2.3:a:dell:openmanage_server_administrator_installer:9.4.0.2:*:*:*:*:*:*:*', -1), ('cpe:2.3:a:dell:openmanage_server_administrator_installer:1.0.0:*:*:*:*:*:*:*', 0.8355902246901327), ('cpe:2.3:a:dell:openmanage_server_administrator_lite:9.4.0.2:*:*:*:*:*:*:*', -1), ('cpe:2.3:a:dell:openmanage_server_administrator_lite:5.4.1:*:*:*:*:*:*:*', 0.8355902246901327)]
         for i, (expected_related_cpe, match_score) in enumerate(expected_related_cpes):
             self.assertEqual(expected_related_cpe, result[i][0])
             self.assertAlmostEqual(match_score, result[i][1])
@@ -83,7 +83,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = 'openssh 8.3 p4'
         result = search_cpes(query)['pot_cpes']
-        expected_related_cpes =  [('cpe:2.3:a:openssh:openssh:8.3:*:*:*:*:*:*:*', -1), ('cpe:2.3:a:openssh:openssh:8.3:p4:*:*:*:*:*:*', -1), ('cpe:2.3:a:openssh:openssh:8.3_p4:*:*:*:*:*:*:*', -1), ('cpe:2.3:a:openssh:openssh:-:*:*:*:*:*:*:*', 0.74544047460131), ('cpe:2.3:a:gsi-openssh_project:gsi-openssh:8.3:p1:*:*:*:*:*:*', -1), ('cpe:2.3:a:gsi-openssh_project:gsi-openssh:8.3:p4:*:*:*:*:*:*', -1), ('cpe:2.3:a:gsi-openssh_project:gsi-openssh:8.3_p4:p1:*:*:*:*:*:*', -1), ('cpe:2.3:a:gsi-openssh_project:gsi-openssh:7.9:p1:*:*:*:*:*:*', 0.577512246553083), ('cpe:2.3:a:openbsd:openssh:8.3:*:*:*:*:*:*:*', -1), ('cpe:2.3:a:openbsd:openssh:8.3:p4:*:*:*:*:*:*', -1), ('cpe:2.3:a:openbsd:openssh:8.3_p4:*:*:*:*:*:*:*', -1), ('cpe:2.3:a:openbsd:openssh:-:*:*:*:*:*:*:*', 0.5351488328077251)]
+        expected_related_cpes =  [('cpe:2.3:a:openssh:openssh:8.3:*:*:*:*:*:*:*', -1), ('cpe:2.3:a:openssh:openssh:8.3:p4:*:*:*:*:*:*', -1), ('cpe:2.3:a:openssh:openssh:8.3_p4:*:*:*:*:*:*:*', -1), ('cpe:2.3:a:openssh:openssh:-:*:*:*:*:*:*:*', 0.74544047460131), ('cpe:2.3:a:openssh:openssh:9.1:*:*:*:*:*:*:*', 0.7258247616391765), ('cpe:2.3:a:openbsd:openssh:8.3:p4:*:*:*:*:*:*', -1), ('cpe:2.3:a:openbsd:openssh:8.3_p4:*:*:*:*:*:*:*', -1), ('cpe:2.3:a:openbsd:openssh:8.3:*:*:*:*:*:*:*', 0.7032799679449337)]
         for i, (expected_related_cpe, match_score) in enumerate(expected_related_cpes):
             self.assertEqual(expected_related_cpe, result[i][0])
             self.assertAlmostEqual(match_score, result[i][1])
@@ -92,7 +92,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = 'datatables 1.9.4'
         result = search_cpes(query)['pot_cpes']
-        expected_related_cpes = [('cpe:2.3:a:datatables:datatables.net:1.9.4:-:*:*:*:node.js:*:*', -1), ('cpe:2.3:a:datatables:datatables.net:1.10.0:-:*:*:*:node.js:*:*', 0.43397267978578885), ('cpe:2.3:a:sprymedia:datatables:1.9.4:*:*:*:*:jquery:*:*', -1), ('cpe:2.3:a:sprymedia:datatables:1.9.2:*:*:*:*:jquery:*:*', 0.40060727459547485), ('cpe:2.3:a:form:form.io:1.9.4:*:*:*:*:*:*:*', 0.38932394614487376)]
+        expected_related_cpes = [('cpe:2.3:a:datatables:datatables.net:1.9.4:-:*:*:*:node.js:*:*', -1), ('cpe:2.3:a:datatables:datatables.net:1.10.0:-:*:*:*:node.js:*:*', 0.43397267978578885), ('cpe:2.3:a:datatables:datatables.net:1.9.4:beta1:*:*:*:node.js:*:*', -1), ('cpe:2.3:a:datatables:datatables.net:1.10.0:beta1:*:*:*:node.js:*:*', 0.41674310186320396), ('cpe:2.3:a:sprymedia:datatables:1.9.4:*:*:*:*:jquery:*:*', -1), ('cpe:2.3:a:sprymedia:datatables:1.9.2:*:*:*:*:jquery:*:*', 0.40060727459547485)]
         for i, (expected_related_cpe, match_score) in enumerate(expected_related_cpes):
             self.assertEqual(expected_related_cpe, result[i][0])
             self.assertAlmostEqual(match_score, result[i][1])
