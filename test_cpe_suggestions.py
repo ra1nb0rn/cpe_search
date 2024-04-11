@@ -88,11 +88,20 @@ class TestSearches(unittest.TestCase):
             self.assertEqual(expected_related_cpe, result[i][0])
             self.assertAlmostEqual(match_score, result[i][1])
 
-    def test_search_datatables_194(self):
+    def test_search_datatables_1_9_4(self):
         self.maxDiff = None
         query = 'datatables 1.9.4'
         result = search_cpes(query)['pot_cpes']
         expected_related_cpes = [('cpe:2.3:a:datatables:datatables.net:1.9.4:-:*:*:*:node.js:*:*', -1), ('cpe:2.3:a:datatables:datatables.net:1.10.0:-:*:*:*:node.js:*:*', 0.43397267978578885), ('cpe:2.3:a:datatables:datatables.net:1.9.4:beta1:*:*:*:node.js:*:*', -1), ('cpe:2.3:a:datatables:datatables.net:1.10.0:beta1:*:*:*:node.js:*:*', 0.41674310186320396), ('cpe:2.3:a:sprymedia:datatables:1.9.4:*:*:*:*:jquery:*:*', -1), ('cpe:2.3:a:sprymedia:datatables:1.9.2:*:*:*:*:jquery:*:*', 0.40060727459547485)]
+        for i, (expected_related_cpe, match_score) in enumerate(expected_related_cpes):
+            self.assertEqual(expected_related_cpe, result[i][0])
+            self.assertAlmostEqual(match_score, result[i][1])
+
+    def test_search_microsoft_sql_server_2019_15_00_2000_00_RTM(self):
+        self.maxDiff = None
+        query = 'microsoft sql_server 2019 15.00.2000.00;RTM'
+        result = search_cpes(query)['pot_cpes']
+        expected_related_cpes = [('cpe:2.3:a:microsoft:sql_server:2019:15.00.2000.00:*:*:*:*:*:*', -1), ('cpe:2.3:a:microsoft:sql_server:2019:15.00.2000.00:RTM:*:*:*:*:*', -1), ('cpe:2.3:a:microsoft:sql_server:2019_15.00.2000.00_RTM:*:*:*:*:*:*:*', -1), ('cpe:2.3:a:microsoft:sql_server:2019:*:*:*:*:*:*:*', 0.7523479560247002), ('cpe:2.3:a:microsoft:sql_server:-:*:*:*:*:*:*:*', 0.6899566027601122), ('cpe:2.3:a:microsoft:sql_srv:2019:*:*:*:*:*:*:*', -1), ('cpe:2.3:a:microsoft:sql_srv:2019:15.00.2000.00:*:*:*:*:*:*', -1), ('cpe:2.3:a:microsoft:sql_srv:2019:15.00.2000.00:RTM:*:*:*:*:*', -1), ('cpe:2.3:a:microsoft:sql_srv:2019_15.00.2000.00_RTM:*:*:*:*:*:*:*', -1), ('cpe:2.3:a:microsoft:sql_srv:-:*:*:*:*:*:*:*', 0.6899566027601122)]
         for i, (expected_related_cpe, match_score) in enumerate(expected_related_cpes):
             self.assertEqual(expected_related_cpe, result[i][0])
             self.assertAlmostEqual(match_score, result[i][1])

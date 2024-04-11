@@ -43,6 +43,7 @@ API_CPE_RESULTS_PER_PAGE = 10000
 UPDATE_SUCCESS = True
 SILENT = True
 DEBUG = False
+CPE_CREATION_DEL_SYMBOLS_RE = re.compile(r'[\]"\|{>)/`<#},\[\:(=;^\'%]')
 POPULAR_QUERY_CORRECTIONS = {'flask': 'palletsprojects', 'keycloak': 'redhat red hat', 'rabbitmq': 'vmware', 'bootstrap': 'getbootstrap',
                              'kotlin': 'jetbrains', 'spring boot': 'vmware', 'debian': 'linux', 'ansible': 'redhat', 'twig': 'symfony',
                              'proxmox ve': 'virtual environment', 'nextjs': 'vercel', 'next.js': 'vercel', 'ubuntu': 'linux',
@@ -527,13 +528,16 @@ def _search_cpes(queries_raw, count, threshold, config=None):
     alt_queries_mapping = _get_alternative_queries(queries)
     for alt_queries in alt_queries_mapping.values():
         queries += alt_queries
-    queries = list(set(queries))
 
     query_infos = {}
     most_similar = {}
     all_query_words = set()
+    included_word_sets = {}
     for query in queries:
         words_query = TEXT_TO_VECTOR_RE.findall(query)
+        if words_query in included_word_sets.values():
+            continue
+        included_word_sets[query] = words_query
         word_weights_query = {}
         for i, word in enumerate(words_query):
             if word not in word_weights_query:
@@ -547,6 +551,7 @@ def _search_cpes(queries_raw, count, threshold, config=None):
         query_abs = math.sqrt(sum([cnt**2 for cnt in query_tf.values()]))
         query_infos[query] = (query_tf, query_abs)
         most_similar[query] = {}
+    queries = list(included_word_sets.keys())
 
     # set up DB connector
     conn = get_database_connection(config['DATABASE'], config['DATABASE_NAME'])
@@ -858,9 +863,13 @@ def search_cpes(query, count=3, threshold=-1, config=None):
         if not cpes:
             return {'cpes': [], 'pot_cpes': []}
 
+        # try to clean stop words / symbols
+        cpe_creation_query = CPE_CREATION_DEL_SYMBOLS_RE.sub(' ', query)
+        cpe_creation_query = cpe_creation_query.replace('  ', ' ')
+
         # always create related queries with supplied version number
         for cpe, sim in cpes:
-            new_cpes = create_cpes_from_base_cpe_and_query(cpe, query)
+            new_cpes = create_cpes_from_base_cpe_and_query(cpe, cpe_creation_query)
             for new_cpe in new_cpes:
                 # do not overwrite sim score of an existing CPE
                 if any(is_cpe_equal(new_cpe, existing_cpe[0]) for existing_cpe in cpes):
@@ -875,7 +884,7 @@ def search_cpes(query, count=3, threshold=-1, config=None):
         # always create related queries without version number if query is versionless
         versionless_cpe_inserts, new_idx = [], 0
         for cpe, _ in pot_cpes:
-            base_cpe = create_base_cpe_if_versionless_query(cpe, query)
+            base_cpe = create_base_cpe_if_versionless_query(cpe, cpe_creation_query)
             if base_cpe:
                 if ((not any(is_cpe_equal(base_cpe, other[0]) for other in pot_cpes)) and
                         not any(is_cpe_equal(base_cpe, other[0][0]) for other in versionless_cpe_inserts)):
@@ -895,7 +904,7 @@ def search_cpes(query, count=3, threshold=-1, config=None):
             bad_match = True
 
         # if a version number is clearly detectable in query, ensure this version is somewhat reflected in the CPE
-        versions_in_query = get_possible_versions_in_query(query)
+        versions_in_query = get_possible_versions_in_query(cpe_creation_query)
         if not bad_match:
             cpe_has_matching_version = False
             for possible_version in versions_in_query:
