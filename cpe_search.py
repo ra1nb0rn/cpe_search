@@ -50,7 +50,9 @@ POPULAR_QUERY_CORRECTIONS = {'flask': 'palletsprojects', 'keycloak': 'redhat red
                              'symfony': 'sensiolabs', 'electron': 'electronjs', 'microsoft exchange': 'server'}
 QUERY_ABBREVIATIONS = {'adc': (['citrix'], 'application delivery controller'), 'omsa': (['dell'], 'openmanage server administrator'),
                        'cdk': (['amazon', 'aws'], 'aws cdk cloud development kit'), 'srm': (['vmware'], 'site recovery manager'),
-                       'paloaltonetworks': ([], 'palo alto networks'), 'palo alto networks': ([], 'paloaltonetworks')}
+                       'paloaltonetworks': ([], 'palo alto networks'), 'palo alto networks': ([], 'paloaltonetworks'),
+                       'trend micro': ([], 'trendmicro'), 'ds': (['trend', 'micro'], 'deep security'),
+                       'dsa': (['trend', 'micro'], 'deep security agent'), 'dsm': (['trend', 'micro'], 'deep security manager')}
 
 
 def parse_args():
@@ -405,10 +407,15 @@ def _get_alternative_queries(init_queries):
             alt_queries_mapping[query].append(alt_query)
 
         # check for "simple" abbreviations
+        alt_query_all_replaced = query
         for abbreviation, (required_keywords, replacement) in QUERY_ABBREVIATIONS.items():
             if not required_keywords or any(keyword in query for keyword in required_keywords):
                 if query.startswith(abbreviation) or query.endswith(abbreviation) or f' {abbreviation} ' in query:
                     alt_queries_mapping[query].append(query.replace(abbreviation, f' {replacement} '))
+                    alt_query_all_replaced = alt_query_all_replaced.replace(abbreviation, f' {replacement} ')
+
+        if alt_query_all_replaced != query:
+            alt_queries_mapping[query].append(alt_query_all_replaced)
 
         # check for Cisco 'CM' and 'SME' abbreviations
         if 'cisco' in query and (query.startswith('cm ') or query.endswith(' cm') or ' cm ' in query):
