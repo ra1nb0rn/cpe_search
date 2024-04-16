@@ -853,6 +853,42 @@ def get_all_cpes(config=None):
     return cpes
 
 
+def cpe_matches_query(cpe, query):
+    """Return True if the given CPE somewhat matches the query, e.g. its version number."""
+
+    check_str, bad_match = cpe[8:], False
+
+    # ensure that the retrieved CPE has a number if query has a number
+    if any(char.isdigit() for char in query) and not any(char.isdigit() for char in check_str):
+        bad_match = True
+
+    # if a version number is clearly detectable in query, ensure this version is somewhat reflected in the CPE
+    versions_in_query = get_possible_versions_in_query(query)
+    if not bad_match:
+        cpe_has_matching_version = False
+        for possible_version in versions_in_query:
+            # ensure version has at least two parts to avoid using a short version for checking
+            if '.' not in possible_version:
+                continue
+
+            idx_pos_ver, idx_check_str = 0, 0
+            while idx_pos_ver < len(possible_version) and idx_check_str < len(check_str):
+                while idx_pos_ver < len(possible_version) and not possible_version[idx_pos_ver].isdigit():
+                    idx_pos_ver += 1
+                if idx_pos_ver < len(possible_version) and possible_version[idx_pos_ver] == check_str[idx_check_str]:
+                    idx_pos_ver += 1
+                idx_check_str += 1
+
+            if idx_pos_ver == len(possible_version):
+                cpe_has_matching_version = True
+                break
+
+        if versions_in_query and not cpe_has_matching_version:
+            bad_match = True
+
+    return bad_match
+
+
 def search_cpes(query, count=3, threshold=-1, config=None):
     if not query:
         return {'cpes': [], 'pot_cpes': []}
@@ -903,36 +939,7 @@ def search_cpes(query, count=3, threshold=-1, config=None):
             pot_cpes.insert(idx, new_cpe)
 
         # catch bad CPE matches
-        bad_match = False
-        check_str = cpes[0][0][8:]
-
-        # ensure that the retrieved CPE has a number if query has a number
-        if any(char.isdigit() for char in query) and not any(char.isdigit() for char in check_str):
-            bad_match = True
-
-        # if a version number is clearly detectable in query, ensure this version is somewhat reflected in the CPE
-        versions_in_query = get_possible_versions_in_query(cpe_creation_query)
-        if not bad_match:
-            cpe_has_matching_version = False
-            for possible_version in versions_in_query:
-                # ensure version has at least two parts to avoid using a short version for checking
-                if '.' not in possible_version:
-                    continue
-
-                idx_pos_ver, idx_check_str = 0, 0
-                while idx_pos_ver < len(possible_version) and idx_check_str < len(check_str):
-                    while idx_pos_ver < len(possible_version) and not possible_version[idx_pos_ver].isdigit():
-                        idx_pos_ver += 1
-                    if idx_pos_ver < len(possible_version) and possible_version[idx_pos_ver] == check_str[idx_check_str]:
-                        idx_pos_ver += 1
-                    idx_check_str += 1
-
-                if idx_pos_ver == len(possible_version):
-                    cpe_has_matching_version = True
-                    break
-            if versions_in_query and not cpe_has_matching_version:
-                bad_match = True
-
+        bad_match = cpe_matches_query(cpes[0][0], cpe_creation_query)
         if bad_match:
             if cpes[0][1] > threshold:
                 return {'cpes': [], 'pot_cpes': pot_cpes}
