@@ -886,7 +886,7 @@ def cpe_matches_query(cpe, query):
         if versions_in_query and not cpe_has_matching_version:
             bad_match = True
 
-    return bad_match
+    return not bad_match
 
 
 def search_cpes(query, count=3, threshold=-1, config=None):
@@ -939,7 +939,7 @@ def search_cpes(query, count=3, threshold=-1, config=None):
             pot_cpes.insert(idx, new_cpe)
 
         # catch bad CPE matches
-        bad_match = cpe_matches_query(cpes[0][0], cpe_creation_query)
+        bad_match = not cpe_matches_query(cpes[0][0], cpe_creation_query)
         if bad_match:
             if cpes[0][1] > threshold:
                 return {'cpes': [], 'pot_cpes': pot_cpes}
