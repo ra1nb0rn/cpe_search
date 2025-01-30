@@ -974,6 +974,12 @@ def cpe_matches_query(cpe, query):
         if versions_in_query and not cpe_has_matching_version:
             bad_match = True
 
+    # check that at least one query term, apart from the version number, is contained in the CPE
+    if not bad_match:
+        non_version_terms = [term.lower() for term in query.split(' ') if term not in versions_in_query]
+        if not any(term in cpe for term in non_version_terms):
+            bad_match = True
+
     return not bad_match
 
 
