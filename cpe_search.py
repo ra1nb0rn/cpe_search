@@ -580,7 +580,7 @@ def _get_alternative_queries(init_queries):
                         int(char)
                         cur_char_class = '0123456789'
                     except ValueError:
-                        cur_char_class = '!"#$%&\'()*+,-./:;<=>?@[\]^_`{|}~'
+                        cur_char_class = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'
             pot_alt_query += char
 
         pot_alt_query_parts = pot_alt_query.split()
