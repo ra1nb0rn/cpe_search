@@ -51,7 +51,7 @@ POPULAR_QUERY_CORRECTIONS = {'flask': 'palletsprojects', 'keycloak': 'redhat red
 QUERY_ABBREVIATIONS = {'adc': (['citrix'], 'application delivery controller'), 'omsa': (['dell'], 'openmanage server administrator'),
                        'cdk': (['amazon', 'aws'], 'aws cdk cloud development kit'), 'srm': (['vmware'], 'site recovery manager'),
                        'paloaltonetworks': ([], 'palo alto networks'), 'palo alto networks': ([], 'paloaltonetworks'),
-                       'trend micro': ([], 'trendmicro'), 'ds': (['trend', 'micro'], 'deep security'),
+                       'trend micro': ([], 'trendmicro'), 'ds': (['trend', 'micro'], 'deep security'), 'ms': ([], 'microsoft'),
                        'dsa': (['trend', 'micro'], 'deep security agent'), 'dsm': (['trend', 'micro'], 'deep security manager')}
 
 
