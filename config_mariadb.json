@@ -1,8 +1,10 @@
 {
-    "DATABASE_NAME": "cpe_search_dictionary",
     "DEPRECATED_CPES_FILE": "deprecated-cpes.json",
     "NVD_API_KEY": "",
-    "DATABASE":{
+    "CPE_SEARCH_COUNT": 6,
+    "CPE_SEARCH_THRESHOLD": -1,
+    "DATABASE": {
+        "NAME": "cpe_search_dictionary",
         "TYPE": "mariadb",
         "HOST": "localhost",
         "USER": "search_vulns",
