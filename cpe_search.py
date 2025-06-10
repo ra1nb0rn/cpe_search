@@ -542,7 +542,7 @@ async def update(nvd_api_key=None, config=None, create_db=True, stop_update=[]):
         db_cursor.execute("DROP TABLE IF EXISTS product_cpe_counts;")
         create_counts_table = "CREATE TABLE product_cpe_counts (product_cpe_prefix VARCHAR(255), count INTEGER, PRIMARY KEY (product_cpe_prefix));"
     elif config["DATABASE"]["TYPE"] == "mariadb":
-        create_counts_table = "CREATE OR REPLACE TABLE cve_epss (cve_id VARCHAR(25) CHARACTER SET ascii, epss DOUBLE, percentile DOUBLE, PRIMARY KEY (cve_id));"
+        create_counts_table = "CREATE OR REPLACE TABLE product_cpe_counts (product_cpe_prefix VARCHAR(255) CHARACTER SET ascii, count INTEGER, PRIMARY KEY (product_cpe_prefix));"
     db_cursor.execute(create_counts_table)
 
     for product_cpe, count in products_cpe_count.items():
