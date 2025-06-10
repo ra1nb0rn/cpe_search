@@ -518,7 +518,13 @@ async def update(nvd_api_key=None, config=None, create_db=True, stop_update=[]):
 
     # add CPE infos to DB
     terms_to_entries = {}
+    products_cpe_count = {}
     for i, cpe_info in enumerate(cpe_infos):
+        product_cpe = ":".join(cpe_info[0].split(":")[:5]) + ":"
+        if product_cpe not in products_cpe_count:
+            products_cpe_count[product_cpe] = 0
+        products_cpe_count[product_cpe] += 1
+
         db_cursor.execute(
             "INSERT INTO cpe_entries VALUES (?, ?, ?, ?)",
             (i, cpe_info[0], json.dumps(cpe_info[1]), cpe_info[2]),
@@ -530,6 +536,17 @@ async def update(nvd_api_key=None, config=None, create_db=True, stop_update=[]):
     db_conn.commit()
     db_cursor.close()
     db_cursor = db_conn.cursor()
+
+    # insert products_cpe_count into DB
+    if config["DATABASE"]["TYPE"] == "sqlite":
+        db_cursor.execute("DROP TABLE IF EXISTS product_cpe_counts;")
+        create_counts_table = "CREATE TABLE product_cpe_counts (product_cpe_prefix VARCHAR(255), count INTEGER, PRIMARY KEY (product_cpe_prefix));"
+    elif config["DATABASE"]["TYPE"] == "mariadb":
+        create_counts_table = "CREATE OR REPLACE TABLE cve_epss (cve_id VARCHAR(25) CHARACTER SET ascii, epss DOUBLE, percentile DOUBLE, PRIMARY KEY (cve_id));"
+    db_cursor.execute(create_counts_table)
+
+    for product_cpe, count in products_cpe_count.items():
+        db_cursor.execute("INSERT INTO product_cpe_counts VALUES(?, ?)", (product_cpe, count))
 
     # add term --> entries translations to DB
     for term, entry_ids in terms_to_entries.items():
