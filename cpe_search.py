@@ -39,6 +39,7 @@ VERSION_MATCH_CPE_CREATION_RE = re.compile(
 )
 VERSION_SPLIT_DIFF_CHARSETS_RE = re.compile(r"(?<=\d)(?=[^\d.])")
 MATCH_CPE_23_RE = re.compile(r"cpe:2\.3:[aoh](:[^:]+){2,10}")
+CPE_SEARCH_THRESHOLD_ALT = 0.25
 TERMS = []
 TERMS_MAP = {}
 ALT_QUERY_MAXSPLIT = 1
@@ -1186,7 +1187,9 @@ def search_cpes(query, db_cursor=None, count=None, threshold=None, config=None):
     cpes, pot_cpes = [], []
 
     if not MATCH_CPE_23_RE.match(query):
-        cpes = _search_cpes([query], db_cursor, count=count, threshold=threshold, config=config)
+        cpes = _search_cpes(
+            [query], db_cursor, count=count, threshold=CPE_SEARCH_THRESHOLD_ALT, config=config
+        )
         cpes = cpes.get(query, [])
 
         if not cpes:
