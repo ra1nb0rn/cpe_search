@@ -79,6 +79,7 @@ QUERY_ABBREVIATIONS = {
     "dsa": (["trend", "micro"], "deep security agent"),
     "dsm": (["trend", "micro"], "deep security manager"),
 }
+TF_IDF_DEDUPLICATION_KEYWORDS = {"apache": 1, "flask": 1}
 
 
 def parse_args():
@@ -232,6 +233,37 @@ def compute_cpe_entry_tf_norm(cpe, name=""):
     # compute term weights with exponential decay according to word position
     words_cpe = TEXT_TO_VECTOR_RE.findall(" ".join(cpe_elems))
     words_cpe_name = TEXT_TO_VECTOR_RE.findall(" ".join(cpe_name_elems))
+
+    # deduplicate certain keywords, e.g. for cpe:2.3:a:apache:apache-airflow-providers-apache-hive:
+    for keyword, max_count in TF_IDF_DEDUPLICATION_KEYWORDS.items():
+        if keyword in words_cpe:
+            kw_count = words_cpe.count(keyword)
+            del_idxs = []
+            for i, word in enumerate(words_cpe):
+                # allow keyword to appear 2 times max
+                if kw_count < max_count+1 or kw_count == len(words_cpe):
+                    break
+                if word == keyword:
+                    del_idxs.append(i)
+                    kw_count -= 1
+            for i, idx in enumerate(del_idxs):
+                del words_cpe[idx-i]
+
+    for keyword, max_count in TF_IDF_DEDUPLICATION_KEYWORDS.items():
+        if keyword in words_cpe_name:
+            kw_count = words_cpe_name.count(keyword)
+            del_idxs = []
+            for i, word in enumerate(words_cpe_name):
+                # allow keyword to appear max_count times max
+                if kw_count < max_count+1 or kw_count == len(words_cpe_name):
+                    break
+                if word == keyword:
+                    del_idxs.append(i)
+                    kw_count -= 1
+            for i, idx in enumerate(del_idxs):
+                del words_cpe_name[idx-i]
+
+    # actually compute weights
     word_weights_cpe = {}
     for i, word in enumerate(words_cpe):
         if word not in word_weights_cpe:  # always use greatest weight
