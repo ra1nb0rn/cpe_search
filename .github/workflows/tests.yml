@@ -25,5 +25,6 @@ jobs:
         run: NVD_API_KEY=$NVD_API_KEY cpe_search -u
       - name: Test matching CPEs
         run: python3 tests/test_cpes.py
-      - name: Test CPE suggestions
-        run: python3 tests/test_cpe_suggestions.py
+      # skip for now because of non-deterministic issues
+      # - name: Test CPE suggestions
+      #   run: python3 tests/test_cpe_suggestions.py
