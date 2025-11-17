@@ -3,7 +3,7 @@
 import os
 import unittest
 
-from cpe_search import search_cpes
+from cpe_search.cpe_search import search_cpes
 
 
 class TestSearches(unittest.TestCase):
