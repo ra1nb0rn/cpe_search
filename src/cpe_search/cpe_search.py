@@ -70,6 +70,7 @@ QUERY_ABBREVIATIONS = {
     "ms": ([], "microsoft"),
     "dsa": (["trend", "micro"], "deep security agent"),
     "dsm": (["trend", "micro"], "deep security manager"),
+    "asa": (["cisco"], "adaptive security appliance"),
 }
 TF_IDF_DEDUPLICATION_KEYWORDS = {"apache": 1, "flask": 1}
 
