@@ -14,7 +14,6 @@ import ujson
 
 from cpe_search.database_wrapper_functions import *
 
-
 # Constants
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 CPE_API_URL = "https://services.nvd.nist.gov/rest/json/cpes/2.0/"
@@ -234,13 +233,13 @@ def compute_cpe_entry_tf_norm(cpe, name=""):
             del_idxs = []
             for i, word in enumerate(words_cpe):
                 # allow keyword to appear 2 times max
-                if kw_count < max_count+1 or kw_count == len(words_cpe):
+                if kw_count < max_count + 1 or kw_count == len(words_cpe):
                     break
                 if word == keyword:
                     del_idxs.append(i)
                     kw_count -= 1
             for i, idx in enumerate(del_idxs):
-                del words_cpe[idx-i]
+                del words_cpe[idx - i]
 
     for keyword, max_count in TF_IDF_DEDUPLICATION_KEYWORDS.items():
         if keyword in words_cpe_name:
@@ -248,13 +247,13 @@ def compute_cpe_entry_tf_norm(cpe, name=""):
             del_idxs = []
             for i, word in enumerate(words_cpe_name):
                 # allow keyword to appear max_count times max
-                if kw_count < max_count+1 or kw_count == len(words_cpe_name):
+                if kw_count < max_count + 1 or kw_count == len(words_cpe_name):
                     break
                 if word == keyword:
                     del_idxs.append(i)
                     kw_count -= 1
             for i, idx in enumerate(del_idxs):
-                del words_cpe_name[idx-i]
+                del words_cpe_name[idx - i]
 
     # actually compute weights
     word_weights_cpe = {}
