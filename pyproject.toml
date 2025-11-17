@@ -1,0 +1,82 @@
+[build-system]
+requires = ['hatchling']
+build-backend = 'hatchling.build'
+
+[project]
+name = "cpe_search"
+version = "0.1.0"
+description = "Search for Common Platform Enumeration (CPE) strings using software names and titles."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    {name = "Dustin Born", email = "search.vulns1@gmail.com"}
+]
+keywords = ["software", "cpe", "platform", "search", "nvd", "match", "enumeration"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Security",
+    "Topic :: System :: Systems Administration",
+]
+
+dependencies = [
+    "aiohttp",
+    "aiolimiter",
+    "requests",
+    "ujson",
+]
+
+[tool.hatch.build]
+exclude = [
+    "src/cpe_search/deprecated_cpes.json",
+    "src/cpe_search/cpe-search-dictionary.db3",
+]
+
+[project.optional-dependencies]
+mariadb = [
+    "mariadb==1.1.12",
+]
+dev = [
+    "black",
+    "isort",
+    "ruff",
+    "pylint",
+]
+all = [
+    "aiohttp",
+    "aiolimiter",
+    "mariadb==1.1.12",
+    "requests",
+    "ujson",
+]
+
+[project.scripts]
+cpe_search = "cpe_search.cpe_search:main"
+
+[project.urls]
+Homepage = "https://github.com/ra1nb0rn/cpe_search"
+Documentation = "https://github.com/ra1nb0rn/cpe_search"
+Repository = "https://github.com/ra1nb0rn/cpe_search"
+Issues = "https://github.com/ra1nb0rn/cpe_search/issues"
+
+[tool.black]
+line-length = 96
+target-version = ['py311']
+
+[tool.isort]
+profile = "black"
+
+[tool.ruff]
+line-length = 96
+target-version = "py311"
+select = ["ALL"]
+ignore = ["S104", "S201", "T201", "TRY201", "COM812", "E501", "TRY003", "EM101"]
+
+[tool.pylint."FORMAT"]
+max-line-length = 96

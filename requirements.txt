@@ -1,4 +1,0 @@
-ujson
-aiohttp
-aiolimiter
-requests

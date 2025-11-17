@@ -10,16 +10,9 @@ import sys
 import time
 from collections import Counter
 
-try:  # use ujson if available
-    import ujson as json
-except ModuleNotFoundError:
-    import json
+import ujson
 
-# direct import when run as standalone script and relative import otherwise
-try:
-    from database_wrapper_functions import *
-except:
-    from .database_wrapper_functions import *
+from cpe_search.database_wrapper_functions import *
 
 
 # Constants
@@ -154,7 +147,7 @@ def _load_config(config_file=DEFAULT_CONFIG_FILE):
         return config
 
     with open(config_file) as f:  # default: config.json
-        config_raw = json.loads(f.read())
+        config_raw = ujson.loads(f.read())
         config = load_config_dict(config_raw, "")
 
     return config
@@ -330,7 +323,7 @@ def add_cpes_to_db(cpe_infos, config, check_duplicates=True):
         if not check_duplicates or do_insert:
             db_cursor.execute(
                 "INSERT INTO cpe_entries VALUES (?, ?, ?, ?)",
-                (eid, cpe_info[0], json.dumps(cpe_info[1]), cpe_info[2]),
+                (eid, cpe_info[0], ujson.dumps(cpe_info[1]), cpe_info[2]),
             )
             for term in cpe_info[1]:
                 if term not in terms_to_entries:
@@ -542,7 +535,7 @@ async def update(nvd_api_key=None, config=None, create_db=True, stop_update=[]):
 
     # create tables
     with open(CREATE_SQL_STATEMENTS_FILE) as f:
-        create_sql_statements = json.loads(f.read())
+        create_sql_statements = ujson.loads(f.read())
     db_cursor.execute(create_sql_statements["TABLES"]["CPE_ENTRIES"][db_type])
     db_cursor.execute(create_sql_statements["TABLES"]["TERMS_TO_ENTRIES"][db_type])
     db_conn.commit()
@@ -560,7 +553,7 @@ async def update(nvd_api_key=None, config=None, create_db=True, stop_update=[]):
 
         db_cursor.execute(
             "INSERT INTO cpe_entries VALUES (?, ?, ?, ?)",
-            (i, cpe_info[0], json.dumps(cpe_info[1]), cpe_info[2]),
+            (i, cpe_info[0], ujson.dumps(cpe_info[1]), cpe_info[2]),
         )
         for term in cpe_info[1]:
             if term not in terms_to_entries:
@@ -619,7 +612,7 @@ async def update(nvd_api_key=None, config=None, create_db=True, stop_update=[]):
                     )
                 else:
                     final_deprecations[deprecated_cpe] = deprecation[deprecated_cpe]
-        outfile.write("%s\n" % json.dumps(final_deprecations))
+        outfile.write("%s\n" % ujson.dumps(final_deprecations))
         outfile.close()
 
     return True
@@ -899,7 +892,7 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
             continue
         processed_cpes.add(cpe)
 
-        cpe_tf = json.loads(cpe_tf)
+        cpe_tf = ujson.loads(cpe_tf)
         cpe_abs = float(cpe_abs)
 
         for query in queries:
@@ -1306,7 +1299,9 @@ def search_cpes(query, db_cursor=None, count=None, threshold=None, config=None):
     return {"cpes": cpes, "pot_cpes": pot_cpes}
 
 
-if __name__ == "__main__":
+def main():
+    global SILENT, UPDATE_SUCCESS
+
     SILENT = not sys.stdout.isatty()
     args = parse_args()
 
@@ -1362,3 +1357,7 @@ if __name__ == "__main__":
                 print("Could not find software for query: %s" % query)
                 if not SILENT:
                     pprint.pprint([])
+
+
+if __name__ == "__main__":
+    main()
