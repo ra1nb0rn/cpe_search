@@ -200,7 +200,7 @@ def intermediate_process(api_data, requestno):
     deprecations = []
     for product in products:
         extracted_title = ""
-        deprecated = product["cpe"]["deprecated"]
+        deprecated = product["cpe"].get("deprecated", False)
         cpe_name = product["cpe"]["cpeName"]
         for title in product["cpe"]["titles"]:
             # assume an english title is always present
@@ -208,7 +208,7 @@ def intermediate_process(api_data, requestno):
                 extracted_title = title["title"]
         if deprecated:
             deprecated_by = {cpe_name: []}
-            for item in product["cpe"]["deprecatedBy"]:
+            for item in product["cpe"].get("deprecatedBy", []):
                 deprecated_by[cpe_name].append(item.get("cpeName"))
             deprecations.append(deprecated_by)
         cpes.append(str(cpe_name + ";" + extracted_title + ";"))
