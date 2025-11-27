@@ -22,6 +22,7 @@ CREATE_SQL_STATEMENTS_FILE = os.path.join(
     os.path.dirname(os.path.realpath(__file__)), "create_sql_statements.json"
 )
 TEXT_TO_VECTOR_RE = re.compile(r"[\w+\.]+")
+SPLIT_QUERY_TERMS_RE = re.compile(r"[ _\-\.]")
 CPE_TERM_WEIGHT_EXP_FACTOR = -0.08
 QUERY_TERM_WEIGHT_EXP_FACTOR = -0.25
 GET_ALL_CPES_RE = re.compile(r"(.*);.*;.*")
@@ -1188,7 +1189,7 @@ def cpe_matches_query(cpe, query):
     # check that at least one query term, apart from the version number, is contained in the CPE
     if not bad_match:
         non_version_terms = [
-            term.lower() for term in query.split(" ") if term not in versions_in_query
+            term.lower() for term in SPLIT_QUERY_TERMS_RE.split(query) if term not in versions_in_query
         ]
         if not any(term in cpe for term in non_version_terms):
             bad_match = True

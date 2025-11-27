@@ -1,6 +1,10 @@
 # Changelog
 This file keeps track of all notable changes between the different versions of cpe_search.
 
+## v0.1.4 - 2025-11-27
+### Fixed
+- Fixed bug with `-` and `_` in queries preventing valid CPE matches
+
 ## v0.1.3 - 2025-11-21
 ### Fixed
 - Skip retrieval of deprecatedBy CPEs if NVD's dictionary does not contain this data
