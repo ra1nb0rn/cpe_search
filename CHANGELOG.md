@@ -1,6 +1,10 @@
 # Changelog
 This file keeps track of all notable changes between the different versions of cpe_search.
 
+## v0.1.6 - 2025-12-06
+### Fixed
+- Fix bugs from last update
+
 ## v0.1.5 - 2025-12-06
 ### Fixed
 - Remove duplicate CPEs in results

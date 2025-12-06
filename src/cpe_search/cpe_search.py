@@ -987,6 +987,8 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
     for query_raw in queries_raw:
         retrieved_cpes = set()
         del_idxs = []
+        if query_raw not in results:
+            continue
         for i in range(len(results[query_raw])):
             if results[query_raw][i][0] in retrieved_cpes:
                 del_idxs.append(i)
@@ -1116,7 +1118,7 @@ def create_cpes_from_base_cpe_and_query(cpe, query):
     # check that no cpe subversion part is already in query version part
     cpe_part_in_version = False
     for cpe_part in cpe.split(":")[6:]:
-        if cpe_part in version_parts[0]:
+        if version_parts and cpe_part in version_parts[0]:
             cpe_part_in_version = True
             break
 
