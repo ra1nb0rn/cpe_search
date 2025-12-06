@@ -983,6 +983,18 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
                 unified_most_similar, key=lambda entry: (-entry[1], entry[0])
             )
 
+    # remove duplicates coming from alt queries and keep highest score
+    for query_raw in queries_raw:
+        retrieved_cpes = set()
+        del_idxs = []
+        for i in range(len(results[query_raw])):
+            if results[query_raw][i][0] in retrieved_cpes:
+                del_idxs.append(i)
+            else:
+                retrieved_cpes.add(results[query_raw][i][0])
+        for i in range(len(del_idxs)):
+            del results[query_raw][del_idxs[i] - i]
+
     # only return the number of requested CPEs for final results
     if count != -1:
         for query in queries_raw:
@@ -1101,8 +1113,15 @@ def create_cpes_from_base_cpe_and_query(cpe, query):
             version_part_in_cpe = True
             break
 
+    # check that no cpe subversion part is already in query version part
+    cpe_part_in_version = False
+    for cpe_part in cpe.split(":")[6:]:
+        if cpe_part in version_parts[0]:
+            cpe_part_in_version = True
+            break
+
     # ... and if not, create CPE where the detected version string is entirely put into the sixth CPE field
-    if version_parts and not version_part_in_cpe:
+    if version_parts and not version_part_in_cpe and not cpe_part_in_version:
         cpe_parts = cpe.split(":")
         cpe_parts[5] = version_parts[0].replace(" ", "_")
         new_cpes.append(":".join(cpe_parts))
