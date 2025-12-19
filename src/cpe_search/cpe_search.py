@@ -1126,6 +1126,17 @@ def create_cpes_from_base_cpe_and_query(cpe, query):
     if version_parts and not version_part_in_cpe and not cpe_part_in_version:
         cpe_parts = cpe.split(":")
         cpe_parts[5] = version_parts[0].replace(" ", "_")
+
+        # ... also remove any more specific CPE parts not in the query
+        for i in range(6, len(cpe_parts)):
+            found_part = False
+            for sep in (' ', '-', '+', '_'):
+                if cpe_parts[i] + sep in query or sep + cpe_parts[i] in query:
+                    found_part = True
+                    break
+            if not found_part:
+                cpe_parts[i] = '*'
+
         new_cpes.append(":".join(cpe_parts))
 
     return new_cpes
