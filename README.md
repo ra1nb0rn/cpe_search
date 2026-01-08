@@ -14,12 +14,21 @@ You can also clone this repository and run:
 pip3 install .
 ```
 
-Note that when *cpe_search* is used for the first time, it invokes a small setup routine that downloads all available CPEs from the [NVD's official API](https://nvd.nist.gov/developers/products) and precomputes the data utilized for searches in all subsequent runs. This may take a couple of minutes initially but is only done once. To speed this process up, you can provide an NVD API key if you have one (it's free). The API key can be provided with the ``-k`` argument or specified in an environment variable called ``NVD_API_KEY``. You can also set up and provide a configuration file, see `config.json`.
+Note that to use *cpe_search*, a local database containing all available CPEs is required. You can download a prebuilt version from *cpe_search*'s GitHub releases, which also happens automatically during the first use:
+```sh
+cpe_search -d
+```
+You can also have *cpe_search* build the database itself, based on all available CPEs from the [NVD's official API](https://nvd.nist.gov/developers/products):
+```sh
+cpe_search -u -k "<YOUR_NVD_API_KEY>"
+```
+An NVD API key is optional, but speeds up the building process - and it's free. Building the database yourself typically takes a couple of minutes, since data for subsequent searches is precomputed as well and put into the local database. You can also set up and provide a configuration file, see `config.json`.
+
 
 ## Usage
 *cpe_search*'s usage information is shown in the following:
 ```
-usage: cpe_search [-h] [-u] [-k API_KEY] [-n NUMBER] [-q QUERY] [-v] [-c CONFIG]
+usage: cpe_search [-h] [-u] [-k API_KEY] [-n NUMBER] [-q QUERY] [-v] [-V] [-d] [-c CONFIG]
 
 Search for CPEs using software names and titles -- Created by Dustin Born (ra1nb0rn)
 
@@ -33,6 +42,9 @@ options:
   -q QUERY, --query QUERY
                         A query, i.e. textual software name / title like 'Apache 2.4.39' or 'Wordpress 5.7.2'
   -v, --verbose         Be verbose and print status information
+  -V, --version         Print the version of cpe_search
+  -d, --download-database
+                        Download cpe_search database from latest GitHub release
   -c CONFIG, --config CONFIG
                         A config file to use (default: config.json)
 ```

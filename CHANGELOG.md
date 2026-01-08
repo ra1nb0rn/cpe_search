@@ -1,6 +1,10 @@
 # Changelog
 This file keeps track of all notable changes between the different versions of cpe_search.
 
+## v0.1.9 - 2026-01-08
+### Changed
+- Update README with information about database download.
+
 ## v0.1.8 - 2026-01-08
 ### Added
 - Added GitHub workflow to build CPE database and attach it to the latest release
