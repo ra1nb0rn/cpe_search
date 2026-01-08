@@ -110,6 +110,9 @@ def parse_args():
         "-v", "--verbose", action="store_true", help="Be verbose and print status information"
     )
     parser.add_argument(
+        "-V", "--version", action="store_true", help="Print the version of cpe_search"
+    )
+    parser.add_argument(
         "-c",
         "--config",
         type=str,
@@ -118,7 +121,7 @@ def parse_args():
     )
 
     args = parser.parse_args()
-    if not args.update and not args.queries:
+    if not args.update and not args.queries and not args.version:
         parser.print_help()
     return args
 
@@ -1332,6 +1335,17 @@ def search_cpes(query, db_cursor=None, count=None, threshold=None, config=None):
     return {"cpes": cpes, "pot_cpes": pot_cpes}
 
 
+def get_version():
+    """Return current version of cpe_search"""
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        pkg_version = version("cpe_search")
+    except PackageNotFoundError:
+        pkg_version = "unknown"
+    return pkg_version
+
+
 def main():
     global SILENT, UPDATE_SUCCESS
 
@@ -1344,6 +1358,9 @@ def main():
     perform_update = False
     if args.update:
         perform_update = True
+    elif args.version:
+        print(get_version())
+        return
 
     config = _load_config(args.config)
     if (

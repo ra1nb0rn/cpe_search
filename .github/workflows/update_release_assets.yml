@@ -1,0 +1,57 @@
+name: Update release assets
+on:
+  schedule:
+    - cron: "15 1 * * *"
+  workflow_dispatch:
+jobs:
+  build-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout cpe_search code
+        uses: actions/checkout@v4
+      - name: Set up Python and Pip
+        uses: actions/setup-python@v5
+        with:
+          cache: 'pip'
+          python-version: '3.10'
+      - name: Upgrade Pip
+        run: python3 -m pip install --upgrade pip
+      - name: Install tool
+        run: |
+          pip3 install -e .
+      - name: Build CPE database
+        id: build
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          cpe_search --update
+      - name: Test everything is working
+        run: cpe_search -q 'jquery 2.1.3' | grep 'jquery'
+      - name: Get current cpe_search version tag
+        run: |
+          CURRENT_CPE_SEARCH_TAG="v$(cpe_search -V)"
+          echo "CURRENT_CPE_SEARCH_TAG=$CURRENT_CPE_SEARCH_TAG" >> $GITHUB_ENV
+      - name: Get latest release tag
+        run: |
+          LATEST_TAG=$(curl -s -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/ra1nb0rn/cpe_search/releases/latest | jq -r '.tag_name')
+          if [[ -z $LATEST_TAG || $LATEST_TAG == "null" ]]; then
+            echo "error: could not get latest release tag"
+            exit 1
+          fi
+          echo "LATEST_RELEASE_TAG=$LATEST_TAG" >> $GITHUB_ENV
+      - name: Set Draft or Production Release
+        run: |
+          if [[ "${{ env.LATEST_RELEASE_TAG }}" != "${{ env.CURRENT_CPE_SEARCH_TAG }}" ]]; then
+            echo "RELEASE_IS_DRAFT=true" >> $GITHUB_ENV
+          else
+            echo "RELEASE_IS_DRAFT=false" >> $GITHUB_ENV
+          fi
+      - name: Update resource files of latest release
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ env.CURRENT_CPE_SEARCH_TAG }}
+          draft: ${{ env.RELEASE_IS_DRAFT }}
+          files: |
+            src/cpe_search/cpe-search-dictionary.db3
+            src/cpe_search/deprecated-cpes.json
