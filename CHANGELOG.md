@@ -1,6 +1,12 @@
 # Changelog
 This file keeps track of all notable changes between the different versions of cpe_search.
 
+## v0.1.8 - 2026-01-08
+### Added
+- Added GitHub workflow to build CPE database and attach it to the latest release
+- Added feature to download CPE database from latest GitHub release
+- Added CLI argument to print cpe_search version
+
 ## v0.1.7 - 2025-12-22
 ### Added
 - Improve CPE creation with subversion parts
