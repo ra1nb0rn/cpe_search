@@ -29,6 +29,7 @@ dependencies = [
     "aiohttp",
     "aiolimiter",
     "requests",
+    "tqdm",
     "ujson",
 ]
 

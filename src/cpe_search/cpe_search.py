@@ -10,12 +10,15 @@ import sys
 import time
 from collections import Counter
 
+import requests
 import ujson
+from tqdm import tqdm
 
 from cpe_search.database_wrapper_functions import *
 
 # Constants
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+LATEST_RELEASE_DL_URL = "https://github.com/ra1nb0rn/cpe_search/releases/latest/download/"
 CPE_API_URL = "https://services.nvd.nist.gov/rest/json/cpes/2.0/"
 DEFAULT_CONFIG_FILE = os.path.join(SCRIPT_DIR, "config.json")
 CREATE_SQL_STATEMENTS_FILE = os.path.join(
@@ -113,6 +116,12 @@ def parse_args():
         "-V", "--version", action="store_true", help="Print the version of cpe_search"
     )
     parser.add_argument(
+        "-d",
+        "--download-database",
+        action="store_true",
+        help="Download cpe_search database from latest GitHub release",
+    )
+    parser.add_argument(
         "-c",
         "--config",
         type=str,
@@ -121,7 +130,7 @@ def parse_args():
     )
 
     args = parser.parse_args()
-    if not args.update and not args.queries and not args.version:
+    if not args.update and not args.queries and not args.version and not args.download_database:
         parser.print_help()
     return args
 
@@ -1133,12 +1142,12 @@ def create_cpes_from_base_cpe_and_query(cpe, query):
         # ... also remove any more specific CPE parts not in the query
         for i in range(6, len(cpe_parts)):
             found_part = False
-            for sep in (' ', '-', '+', '_'):
+            for sep in (" ", "-", "+", "_"):
                 if cpe_parts[i] + sep in query or sep + cpe_parts[i] in query:
                     found_part = True
                     break
             if not found_part:
-                cpe_parts[i] = '*'
+                cpe_parts[i] = "*"
 
         new_cpes.append(":".join(cpe_parts))
 
@@ -1224,7 +1233,9 @@ def cpe_matches_query(cpe, query):
     # check that at least one query term, apart from the version number, is contained in the CPE
     if not bad_match:
         non_version_terms = [
-            term.lower() for term in SPLIT_QUERY_TERMS_RE.split(query) if term not in versions_in_query
+            term.lower()
+            for term in SPLIT_QUERY_TERMS_RE.split(query)
+            if term not in versions_in_query
         ]
         if not any(term in cpe for term in non_version_terms):
             bad_match = True
@@ -1346,6 +1357,34 @@ def get_version():
     return pkg_version
 
 
+def download_file(src, dest, show_progressbar=False):
+    """Download file from src to dest and optionally show a progress bar."""
+
+    # Adapted from: https://stackoverflow.com/a/37573701
+
+    response = requests.get(src, stream=True)
+    if response.status_code != 200:
+        raise RuntimeError("Could not download file %s, bad status code" % src)
+    total_size = int(response.headers.get("content-length", 0))
+    received_size = 0
+    block_size = 8192
+    filename = src.split("/")[-1]
+
+    with tqdm(
+        total=total_size, unit="B", unit_scale=True, desc=filename, disable=not show_progressbar
+    ) as progress_bar:
+        with open(dest, "wb") as file:
+            for data in response.iter_content(block_size):
+                progress_bar.update(len(data))
+                file.write(data)
+                received_size += len(data)
+
+    if total_size != 0 and received_size != total_size:
+        raise RuntimeError("Could not download file %s" % src)
+
+    return True
+
+
 def main():
     global SILENT, UPDATE_SUCCESS
 
@@ -1367,10 +1406,26 @@ def main():
         args.queries
         and config["DATABASE"]["TYPE"] == "sqlite"
         and not os.path.isfile(config["DATABASE"]["NAME"])
+        and not args.update
+        and not args.download_database
     ):
         if not SILENT:
-            print("[+] Running initial setup (might take a couple of minutes)", file=sys.stderr)
-        perform_update = True
+            print("[+] Performing initial download of database files", file=sys.stderr)
+        args.download_database = True
+
+    if args.download_database:
+        if config["DATABASE"]["TYPE"].lower() != "sqlite":
+            print("Downloading the database is only supported for SQLite configurations")
+            sys.exit(1)
+        print("[+] Downloading CPE database files from latest release")
+        download_file(
+            LATEST_RELEASE_DL_URL + "cpe-search-dictionary.db3",
+            config["DATABASE"]["NAME"],
+            True,
+        )
+        download_file(
+            LATEST_RELEASE_DL_URL + "deprecated-cpes.json", config["DEPRECATED_CPES_FILE"], True
+        )
 
     if perform_update:
         import asyncio
