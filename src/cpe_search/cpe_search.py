@@ -34,6 +34,7 @@ VERSION_MATCH_CPE_CREATION_RE = re.compile(
     r"\b((\d[\da-zA-Z\.]{0,6})([\+\-\.\_\~ ][\da-zA-Z\.]+){0,4})[^\w\n]*$"
 )
 VERSION_SPLIT_DIFF_CHARSETS_RE = re.compile(r"(?<=\d)(?=[^\d.])")
+SPLIT_SUBVERSION_RE = re.compile(r"(\w+\.\w*)\.?")
 MATCH_CPE_23_RE = re.compile(r"cpe:2\.3:[aoh](:[^:]+){2,10}")
 CPE_SEARCH_THRESHOLD_ALT = 0.25
 TERMS = []
@@ -76,7 +77,6 @@ QUERY_ABBREVIATIONS = {
     "dsm": (["trend", "micro"], "deep security manager"),
     "asa": (["cisco"], "adaptive security appliance"),
 }
-TF_IDF_DEDUPLICATION_KEYWORDS = {"apache": 1, "flask": 1}
 
 
 def parse_args():
@@ -240,35 +240,6 @@ def compute_cpe_entry_tf_norm(cpe, name=""):
     words_cpe = TEXT_TO_VECTOR_RE.findall(" ".join(cpe_elems))
     words_cpe_name = TEXT_TO_VECTOR_RE.findall(" ".join(cpe_name_elems))
 
-    # deduplicate certain keywords, e.g. for cpe:2.3:a:apache:apache-airflow-providers-apache-hive:
-    for keyword, max_count in TF_IDF_DEDUPLICATION_KEYWORDS.items():
-        if keyword in words_cpe:
-            kw_count = words_cpe.count(keyword)
-            del_idxs = []
-            for i, word in enumerate(words_cpe):
-                # allow keyword to appear 2 times max
-                if kw_count < max_count + 1 or kw_count == len(words_cpe):
-                    break
-                if word == keyword:
-                    del_idxs.append(i)
-                    kw_count -= 1
-            for i, idx in enumerate(del_idxs):
-                del words_cpe[idx - i]
-
-    for keyword, max_count in TF_IDF_DEDUPLICATION_KEYWORDS.items():
-        if keyword in words_cpe_name:
-            kw_count = words_cpe_name.count(keyword)
-            del_idxs = []
-            for i, word in enumerate(words_cpe_name):
-                # allow keyword to appear max_count times max
-                if kw_count < max_count + 1 or kw_count == len(words_cpe_name):
-                    break
-                if word == keyword:
-                    del_idxs.append(i)
-                    kw_count -= 1
-            for i, idx in enumerate(del_idxs):
-                del words_cpe_name[idx - i]
-
     # actually compute weights
     word_weights_cpe = {}
     for i, word in enumerate(words_cpe):
@@ -323,30 +294,94 @@ def add_cpes_to_db(cpe_infos, config, check_duplicates=True):
     else:
         cur_max_eid += 1
 
+    # get current max CPE product prefix ID
+    db_cursor.execute("SELECT MAX(cpe_product_prefix_id) FROM cpe_product_prefixes;")
+    cur_max_prefix_id = db_cursor.fetchone()[0]
+    if not cur_max_prefix_id:
+        cur_max_prefix_id = 0
+    else:
+        cur_max_prefix_id += 1
+
     # add CPE infos to DB
     terms_to_entries = {}
     eid = cur_max_eid
+    cpe_prefix_ids = {}
+    cpe_product_counts = {}
+    new_prefixes = set()
     for cpe_info in cpe_infos_tf_norm:
+        # figure out product prefix ID
+        cpe_prefix, cpe_suffix = get_cpe_product_prefix_and_suffix(cpe_info[0])
+        if cpe_prefix in cpe_prefix_ids:
+            cpe_prefix_id = cpe_prefix_ids[cpe_prefix]
+        else:
+            db_cursor.execute(
+                "SELECT cpe_product_prefix_id FROM cpe_product_prefixes WHERE cpe_product_prefix = ?",
+                (cpe_prefix,),
+            )
+            cpe_prefix_id = db_cursor.fetchone()
+            if cpe_prefix_id is None:
+                cpe_prefix_id = cur_max_prefix_id
+                cur_max_prefix_id += 1
+                new_prefixes.add(cpe_prefix)
+            else:
+                cpe_prefix_id = cpe_prefix_id[0]
+            cpe_prefix_ids[cpe_prefix] = cpe_prefix_id
+
+        # retrieve cpe product count
+        if cpe_prefix_id not in cpe_product_counts:
+            db_cursor.execute(
+                "SELECT count FROM cpe_product_counts WHERE cpe_product_prefix_id = ?",
+                (cpe_prefix_id,),
+            )
+            cpe_product_count = db_cursor.fetchone()
+            if cpe_product_count is None:
+                cpe_product_counts[cpe_prefix_id] = 0
+            else:
+                cpe_product_counts[cpe_prefix_id] = cpe_product_count[0]
+
         # insert unconditionally if fresh build, otherwise ensure entry doesn't exist yet
         do_insert = cur_max_eid == 0
         if check_duplicates and not do_insert:
-            db_cursor.execute("SELECT * FROM cpe_entries where cpe = ?", (cpe_info[0],))
+            db_cursor.execute(
+                "SELECT * FROM cpe_entries WHERE cpe_product_prefix_id = ? AND cpe_version_suffix = ?",
+                (cpe_prefix_id, cpe_suffix),
+            )
             do_insert = not bool(db_cursor.fetchone())
 
         if not check_duplicates or do_insert:
             db_cursor.execute(
-                "INSERT INTO cpe_entries VALUES (?, ?, ?, ?)",
-                (eid, cpe_info[0], ujson.dumps(cpe_info[1]), cpe_info[2]),
+                "INSERT INTO cpe_entries VALUES (?, ?, ?, ?, ?)",
+                (eid, cpe_prefix_id, cpe_suffix, ujson.dumps(cpe_info[1]), cpe_info[2]),
             )
             for term in cpe_info[1]:
                 if term not in terms_to_entries:
                     terms_to_entries[term] = []
                 terms_to_entries[term].append(eid)
             eid += 1
+            cpe_product_counts[cpe_prefix_id] += 1
 
     db_conn.commit()
     db_cursor.close()
     db_cursor = db_conn.cursor()
+
+    # add new product prefixes to DB
+    for cpe_prefix in new_prefixes:
+        db_cursor.execute(
+            "INSERT INTO cpe_product_prefixes VALUES(?, ?)",
+            (cpe_prefix_ids[cpe_prefix], cpe_prefix),
+        )
+
+    # add / update CPE product counts
+    for cpe_prefix_id, count in cpe_product_counts.items():
+        if cpe_prefix_id not in new_prefixes:
+            db_cursor.execute(
+                "UPDATE cpe_product_counts SET count = ? WHERE cpe_product_prefix_id = ?",
+                (count, cpe_prefix_id),
+            )
+        else:
+            db_cursor.execute(
+                "INSERT INTO cpe_product_counts VALUES(?, ?)", (cpe_prefix_id, count)
+            )
 
     # add term --> entries translations to DB
     for term, entry_ids in terms_to_entries.items():
@@ -549,24 +584,39 @@ async def update(nvd_api_key=None, config=None, create_db=True, stop_update=[]):
     # create tables
     with open(CREATE_SQL_STATEMENTS_FILE) as f:
         create_sql_statements = ujson.loads(f.read())
-    db_cursor.execute(create_sql_statements["TABLES"]["CPE_ENTRIES"][db_type])
-    db_cursor.execute(create_sql_statements["TABLES"]["TERMS_TO_ENTRIES"][db_type])
+
+    for table in create_sql_statements["TABLES"].values():
+        create_query = table[db_type].strip()
+        if create_query.startswith("DROP"):
+            drop_query, create_query = create_query.split(";", maxsplit=1)
+            try:
+                db_cursor.execute(drop_query)
+            except:
+                pass  # drop errors if table does not exist
+        db_cursor.execute(create_query)
     db_conn.commit()
     db_cursor.close()
     db_cursor = db_conn.cursor()
 
     # add CPE infos to DB
     terms_to_entries = {}
-    products_cpe_count = {}
+    product_prefix_ids = {}
+    cpe_product_counts = {}
     for i, cpe_info in enumerate(cpe_infos):
-        product_cpe = ":".join(cpe_info[0].split(":")[:5]) + ":"
-        if product_cpe not in products_cpe_count:
-            products_cpe_count[product_cpe] = 0
-        products_cpe_count[product_cpe] += 1
+        # split cpe in product prefix and version suffix
+        # and count how many times the product prefix occurs ("popularity")
+        product_prefix, version_suffix = get_cpe_product_prefix_and_suffix(cpe_info[0])
+        if product_prefix not in product_prefix_ids:
+            product_prefix_ids[product_prefix] = len(product_prefix_ids)
+        product_prefix_id = product_prefix_ids[product_prefix]
+
+        if product_prefix_id not in cpe_product_counts:
+            cpe_product_counts[product_prefix_id] = 0
+        cpe_product_counts[product_prefix_id] += 1
 
         db_cursor.execute(
-            "INSERT INTO cpe_entries VALUES (?, ?, ?, ?)",
-            (i, cpe_info[0], ujson.dumps(cpe_info[1]), cpe_info[2]),
+            "INSERT INTO cpe_entries VALUES (?, ?, ?, ?, ?)",
+            (i, product_prefix_id, version_suffix, ujson.dumps(cpe_info[1]), cpe_info[2]),
         )
         for term in cpe_info[1]:
             if term not in terms_to_entries:
@@ -576,16 +626,19 @@ async def update(nvd_api_key=None, config=None, create_db=True, stop_update=[]):
     db_cursor.close()
     db_cursor = db_conn.cursor()
 
-    # insert products_cpe_count into DB
-    if config["DATABASE"]["TYPE"] == "sqlite":
-        db_cursor.execute("DROP TABLE IF EXISTS product_cpe_counts;")
-        create_counts_table = "CREATE TABLE product_cpe_counts (product_cpe_prefix VARCHAR(255), count INTEGER, PRIMARY KEY (product_cpe_prefix));"
-    elif config["DATABASE"]["TYPE"] == "mariadb":
-        create_counts_table = "CREATE OR REPLACE TABLE product_cpe_counts (product_cpe_prefix VARCHAR(255) CHARACTER SET ascii, count INTEGER, PRIMARY KEY (product_cpe_prefix));"
-    db_cursor.execute(create_counts_table)
+    # insert cpe_product_counts into DB
+    for product_prefix_id, count in cpe_product_counts.items():
+        db_cursor.execute(
+            "INSERT INTO cpe_product_counts VALUES(?, ?)", (product_prefix_id, count)
+        )
 
-    for product_cpe, count in products_cpe_count.items():
-        db_cursor.execute("INSERT INTO product_cpe_counts VALUES(?, ?)", (product_cpe, count))
+    # insert product prefixes into DB
+    for prefix, prefix_id in product_prefix_ids.items():
+        db_cursor.execute("INSERT INTO cpe_product_prefixes VALUES(?, ?)", (prefix_id, prefix))
+    # create index for faster searches by prefix
+    db_cursor.execute(
+        "CREATE INDEX idx_cpe_prefix_value ON cpe_product_prefixes (cpe_product_prefix);"
+    )
 
     # add term --> entries translations to DB
     for term, entry_ids in terms_to_entries.items():
@@ -845,6 +898,9 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
     # figure out which CPE infos are relevant, based on the terms of all queries
     all_cpe_entry_ids = []
     for word in all_query_words:
+        # do not retrieve CPEs solely by a matching version number
+        if VERSION_MATCH_ZE_RE.match(word):
+            continue
         # query can only return one result, b/c term is PK
         db_query = "SELECT entry_ids FROM terms_to_entries WHERE term = ?"
         db_cursor.execute(db_query, (word,))
@@ -870,12 +926,15 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
     max_results_per_query = 1000
     remaining = len(all_cpe_entry_ids)
 
+    processed_cpes = set()
+    cpe_product_counts, cpe_product_counts_sum = {}, 0
+    cpe_product_subversion_counts, cpe_product_subversion_counts_sums = {}, {}
     while remaining > 0:
         count_params_in_str = min(remaining, max_results_per_query)
         param_in_str = ("?," * count_params_in_str)[:-1]
 
         db_query = (
-            "SELECT cpe, term_frequencies, abs_term_frequency FROM cpe_entries WHERE entry_id IN (%s)"
+            "SELECT cpe_entries.cpe_product_prefix_id, cpe_product_prefix, cpe_version_suffix, term_frequencies, abs_term_frequency FROM cpe_entries JOIN cpe_product_prefixes ON cpe_entries.cpe_product_prefix_id = cpe_product_prefixes.cpe_product_prefix_id WHERE entry_id IN (%s)"
             % param_in_str
         )
         db_cursor.execute(
@@ -884,7 +943,44 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
         cpe_infos = []
         if db_cursor:
             cpe_infos = db_cursor.fetchall()
-        all_cpe_infos += cpe_infos
+        for cpe_info in cpe_infos:
+            cpe_prefix_id, cpe_prefix, cpe_suffix = cpe_info[:3]
+            cpe = cpe_info[1] + cpe_info[2]
+
+            if cpe in processed_cpes:
+                continue
+            processed_cpes.add(cpe)
+            all_cpe_infos.append(cpe_info[1:])  # omit product prefix ID
+
+            # retrieve product and subversion counts
+            if cpe_prefix not in cpe_product_counts:
+                db_query = (
+                    "SELECT count FROM cpe_product_counts WHERE cpe_product_prefix_id = ?"
+                )
+                db_cursor.execute(db_query, (cpe_prefix_id,))
+                product_count = db_cursor.fetchall()
+                if product_count and product_count[0]:
+                    cpe_product_counts[cpe_prefix] = product_count[0][0]
+                else:
+                    # should not be able to happen
+                    cpe_product_counts[cpe_prefix] = 1
+                cpe_product_counts_sum += cpe_product_counts[cpe_prefix]
+
+            cpe_version = split_cpe(cpe_suffix, maxsplit=1)[0]
+            cpe_subversion = SPLIT_SUBVERSION_RE.match(cpe_version)
+            if not cpe_subversion:
+                cpe_subversion = cpe_version
+            else:
+                cpe_subversion = cpe_subversion.group(1)
+            if cpe_prefix not in cpe_product_subversion_counts:
+                cpe_product_subversion_counts[cpe_prefix] = {}
+            if cpe_subversion not in cpe_product_subversion_counts[cpe_prefix]:
+                cpe_product_subversion_counts[cpe_prefix][cpe_subversion] = 0
+            cpe_product_subversion_counts[cpe_prefix][cpe_subversion] += 1
+            if cpe_subversion not in cpe_product_subversion_counts_sums:
+                cpe_product_subversion_counts_sums[cpe_subversion] = 0
+            cpe_product_subversion_counts_sums[cpe_subversion] += 1
+
         remaining -= max_results_per_query
 
     # same order needed for test repeatability
@@ -897,8 +993,10 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
     # entries and sort them by similarity
     # (cpe-class: base CPE + number of non-wildcard fields)
     processed_cpes = set()
+    cpe_product_popularity = {}
     for cpe_info in all_cpe_infos:
-        cpe, cpe_tf, cpe_abs = cpe_info
+        cpe_prefix, cpe_suffix, cpe_tf, cpe_abs = cpe_info
+        cpe = cpe_prefix + cpe_suffix
 
         # all_cpe_infos may contain duplicates
         if cpe in processed_cpes:
@@ -908,7 +1006,17 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
         cpe_tf = ujson.loads(cpe_tf)
         cpe_abs = float(cpe_abs)
 
+        # compute score for product "popularity"
+        if cpe_prefix not in cpe_product_popularity:
+            scale = cpe_product_counts_sum / len(cpe_product_counts)
+            sim_score_pop = cpe_product_counts[cpe_prefix] / cpe_product_counts_sum
+            sim_score_pop = min(sim_score_pop * scale, 1.0)  # boost
+            cpe_product_popularity[cpe_prefix] = sim_score_pop
+        else:
+            sim_score_pop = cpe_product_popularity[cpe_prefix]
+
         for query in queries:
+            # compute TF-IDF sim score
             query_tf, query_abs = query_infos[query]
             intersecting_words = set(cpe_tf.keys()) & set(query_tf.keys())
             inner_product = sum([cpe_tf[w] * query_tf[w] for w in intersecting_words])
@@ -918,14 +1026,35 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
             if not normalization_factor:  # avoid divison by 0
                 continue
 
-            sim_score = float(inner_product) / float(normalization_factor)
+            sim_score_tf_idf = float(inner_product) / float(normalization_factor)
+
+            # compute unified similarity score
+            sim_score_subversion = 1
+            query_version = VERSION_MATCH_ZE_RE.search(query)
+            if query_version:
+                if ":" + query_version.group(0) + ":" in cpe:
+                    sim_score_subversion = 1
+                else:
+                    query_subversion = SPLIT_SUBVERSION_RE.match(query_version.group(0))
+                    if query_subversion:
+                        query_subversion = query_subversion.group(1)
+                        if query_subversion in cpe_product_subversion_counts[cpe_prefix]:
+                            sim_score_subversion = (
+                                cpe_product_subversion_counts[cpe_prefix][query_subversion]
+                                / cpe_product_subversion_counts_sums[query_subversion]
+                            )
+                        else:
+                            sim_score_subversion = 0
+
+            sim_score = (
+                0.7 * sim_score_tf_idf + 0.2 * sim_score_pop + 0.1 * sim_score_subversion
+            )
 
             if threshold > 0 and sim_score < threshold:
                 continue
 
-            cpe_base = ":".join(cpe.split(":")[:5]) + ":"
             cpe_class = (
-                cpe_base
+                cpe_prefix
                 + "-"
                 + str(10 - sum(cpe_field in ("*", "-", "") for cpe_field in cpe.split(":")))
             )
@@ -1024,6 +1153,43 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
         conn.close()
 
     return results
+
+
+def split_cpe(cpe, maxsplit=None):
+    """Split a CPE by ':' into its individual fields, preserving escaped colons"""
+
+    parts = []
+    current = []
+    escape = False
+
+    for i, char in enumerate(cpe):
+        if maxsplit is not None and len(parts) >= maxsplit:
+            parts.append(cpe[i:])
+            break
+        if char == ":" and not escape:
+            parts.append("".join(current))
+            current = []
+        else:
+            current.append(char)
+        escape = char == "\\"
+    if current:
+        parts.append("".join(current))
+
+    return parts
+
+
+def get_cpe_product_prefix_and_suffix(cpe):
+    """Return CPE product prefix and suffix, e.g. cpe:2.3:a:apache:tomcat: + 9.0.22:*:..."""
+
+    cpe_split = split_cpe(cpe)
+
+    return ":".join(cpe_split[:5]) + ":", ":".join(cpe_split[5:])
+
+
+def get_cpe_product_prefix(cpe):
+    """Return CPE product prefix, e.g. cpe:2.3:a:apache:tomcat:"""
+
+    return get_cpe_product_prefix_and_suffix(cpe)[0]
 
 
 def is_cpe_equal(cpe1, cpe2):
@@ -1291,7 +1457,7 @@ def search_cpes(query, db_cursor=None, count=None, threshold=None, config=None):
 
         # always create related queries without version number if query is versionless
         versionless_cpe_inserts, new_idx = [], 0
-        for cpe, _ in pot_cpes:
+        for cpe, sim in pot_cpes:
             base_cpe = create_base_cpe_if_versionless_query(cpe, cpe_creation_query)
             if base_cpe:
                 if (
