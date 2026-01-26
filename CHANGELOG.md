@@ -1,6 +1,10 @@
 # Changelog
 This file keeps track of all notable changes between the different versions of cpe_search.
 
+## v0.2.1 - 2026-01-26
+### Fixed
+- Improve performance of new search algorithm
+
 ## v0.2.0 - 2026-01-25
 ### Added
 - Improve search algorithm by favoring "popularity" and matching version
