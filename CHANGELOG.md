@@ -1,6 +1,10 @@
 # Changelog
 This file keeps track of all notable changes between the different versions of cpe_search.
 
+## v0.2.2 - 2026-01-26
+### Added
+- If a query without version is detected, create and use CPE without version
+
 ## v0.2.1 - 2026-01-26
 ### Fixed
 - Improve performance of new search algorithm
