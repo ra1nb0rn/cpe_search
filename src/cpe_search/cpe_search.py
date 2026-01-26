@@ -1013,8 +1013,8 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
             cpe = cpe_prefix + "*" + cpe_suffix[cpe_suffix.find(":") :]
 
         # all_cpe_infos may contain duplicates
-        if cpe in processed_cpes:
-            continue
+        if query_version and cpe in processed_cpes:
+            continue  # only if no cpe overwriting happens
         processed_cpes.add(cpe)
 
         cpe_tf = ujson.loads(cpe_tf)
