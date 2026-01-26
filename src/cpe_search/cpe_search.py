@@ -1007,7 +1007,10 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
     cpe_product_popularity = {}
     for cpe_info in all_cpe_infos:
         cpe_prefix, cpe_suffix, cpe_tf, cpe_abs = cpe_info
-        cpe = cpe_prefix + cpe_suffix
+        if query_subversions:
+            cpe = cpe_prefix + cpe_suffix
+        else:
+            cpe = cpe_prefix + "*" + cpe_suffix[cpe_suffix.find(":") :]
 
         # all_cpe_infos may contain duplicates
         if cpe in processed_cpes:
@@ -1065,7 +1068,7 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
             cpe_class = (
                 cpe_prefix
                 + "-"
-                + str(10 - sum(cpe_field in ("*", "-", "") for cpe_field in cpe.split(":")))
+                + str(10 - sum(cpe_field in ("*", "-", "") for cpe_field in split_cpe(cpe)))
             )
             if (
                 cpe_class not in most_similar[query]
