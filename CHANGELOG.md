@@ -1,6 +1,10 @@
 # Changelog
 This file keeps track of all notable changes between the different versions of cpe_search.
 
+## v0.2.4 - 2026-01-27
+### Fixed
+- Fixed a small performance issue
+
 ## v0.2.3 - 2026-01-26
 ### Changed
 - Slightly adjusted weights of new search algorithm.
