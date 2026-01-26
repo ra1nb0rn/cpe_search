@@ -987,6 +987,17 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
     if os.environ.get("IS_CPE_SEARCH_TEST", "false") == "true":
         all_cpe_infos = sorted(all_cpe_infos)
 
+    # figure out and store query versions and subversions
+    query_subversions = {}
+    for query in queries:
+        query_version = VERSION_MATCH_ZE_RE.search(query)
+        if query_version:
+            query_version = query_version.group(0)
+            query_subversion = SPLIT_SUBVERSION_RE.match(query_version)
+            if query_subversion:
+                query_subversion = query_subversion.group(1)
+            query_subversions[query] = (query_version, query_subversion)
+
     # Search Idea: Divide and Conquer
     # Divide all CPEs into a dict of CPE classes where only the most similar
     # CPE for every class is stored. In the end, unify all of these most similar
@@ -1030,14 +1041,12 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
 
             # compute unified similarity score
             sim_score_subversion = 1
-            query_version = VERSION_MATCH_ZE_RE.search(query)
+            query_version, query_subversion = query_subversions.get(query, (None, None))
             if query_version:
-                if ":" + query_version.group(0) + ":" in cpe:
+                if ":" + query_version + ":" in cpe:
                     sim_score_subversion = 1
                 else:
-                    query_subversion = SPLIT_SUBVERSION_RE.match(query_version.group(0))
                     if query_subversion:
-                        query_subversion = query_subversion.group(1)
                         if query_subversion in cpe_product_subversion_counts[cpe_prefix]:
                             sim_score_subversion = (
                                 cpe_product_subversion_counts[cpe_prefix][query_subversion]
