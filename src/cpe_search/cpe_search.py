@@ -1009,13 +1009,12 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
         cpe_prefix, cpe_suffix, cpe_tf, cpe_abs = cpe_info
         if query_subversions:
             cpe = cpe_prefix + cpe_suffix
+            # all_cpe_infos may contain duplicates
+            if cpe in processed_cpes:
+                continue  # only if no cpe overwriting happens
+            processed_cpes.add(cpe)
         else:
             cpe = cpe_prefix + "*" + cpe_suffix[cpe_suffix.find(":") :]
-
-        # all_cpe_infos may contain duplicates
-        if query_version and cpe in processed_cpes:
-            continue  # only if no cpe overwriting happens
-        processed_cpes.add(cpe)
 
         cpe_tf = ujson.loads(cpe_tf)
         cpe_abs = float(cpe_abs)
@@ -1068,7 +1067,7 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
             cpe_class = (
                 cpe_prefix
                 + "-"
-                + str(10 - sum(cpe_field in ("*", "-", "") for cpe_field in split_cpe(cpe)))
+                + str(10 - sum(cpe_field in ("*", "-", "") for cpe_field in cpe.split(":")))
             )
             if (
                 cpe_class not in most_similar[query]
