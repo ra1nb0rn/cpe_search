@@ -76,6 +76,7 @@ QUERY_ABBREVIATIONS = {
     "dsa": (["trend", "micro"], "deep security agent"),
     "dsm": (["trend", "micro"], "deep security manager"),
     "asa": (["cisco"], "adaptive security appliance"),
+    "ack": (["alibaba"], "container service kubernetes"),
 }
 
 
