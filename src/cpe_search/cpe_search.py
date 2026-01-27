@@ -1007,13 +1007,14 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
     cpe_product_popularity = {}
     for cpe_info in all_cpe_infos:
         cpe_prefix, cpe_suffix, cpe_tf, cpe_abs = cpe_info
-        if query_subversions:
-            cpe = cpe_prefix + cpe_suffix
-            # all_cpe_infos may contain duplicates
-            if cpe in processed_cpes:
-                continue  # only if no cpe overwriting happens
-            processed_cpes.add(cpe)
-        else:
+
+        # all_cpe_infos may contain duplicates
+        cpe = cpe_prefix + cpe_suffix
+        if cpe in processed_cpes:
+            continue  # only if no cpe overwriting happens
+        processed_cpes.add(cpe)
+
+        if not query_subversions:
             cpe = cpe_prefix + "*" + cpe_suffix[cpe_suffix.find(":") :]
 
         cpe_tf = ujson.loads(cpe_tf)
