@@ -442,7 +442,7 @@ async def worker(headers, params, requestno, rate_limit, stop_update=[]):
 
     if api_data_response is not None:
         try:
-            (cpes, deprecations) = intermediate_process(
+            cpes, deprecations = intermediate_process(
                 api_data=api_data_response, requestno=requestno
             )
             if DEBUG:
@@ -1059,7 +1059,7 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
                             sim_score_subversion = 0
 
             sim_score = (
-                0.76 * sim_score_tf_idf + 0.14 * sim_score_pop + 0.1 * sim_score_subversion
+                0.8 * sim_score_tf_idf + 0.11 * sim_score_pop + 0.09 * sim_score_subversion
             )
 
             if threshold > 0 and sim_score < threshold:
