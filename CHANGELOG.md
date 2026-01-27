@@ -1,6 +1,16 @@
 # Changelog
 This file keeps track of all notable changes between the different versions of cpe_search.
 
+## v0.2.5 - 2026-01-27
+### Added
+- Added an abbreviation for Alibaba ACK
+
+### Changed
+- Slightly adjusted weights of new search algorithm.
+
+### Fixed
+- Fixed another small performance issue
+
 ## v0.2.4 - 2026-01-27
 ### Fixed
 - Fixed a small performance issue
