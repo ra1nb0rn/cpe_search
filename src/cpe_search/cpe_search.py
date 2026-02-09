@@ -482,11 +482,18 @@ async def update(nvd_api_key=None, config=None, create_db=True, stop_update=[]):
     import requests
     from aiolimiter import AsyncLimiter
 
-    if not SILENT:
-        print("[+] Getting NVD's official CPE data (might take some time)")
-
     if not config:
         config = _load_config()
+
+    # retrieve database name and check it's safe
+    db_type = config["DATABASE"]["TYPE"]
+    db_name = config["DATABASE"]["NAME"]
+    if db_type != "sqlite" and not is_safe_db_name(db_name, db_type.lower()):
+        print("Potentially malicious database name detected. Aborting creation of database")
+        return False
+
+    if not SILENT:
+        print("[+] Getting NVD's official CPE data (might take some time)")
 
     if not nvd_api_key:
         nvd_api_key = os.getenv("NVD_API_KEY")
@@ -561,12 +568,6 @@ async def update(nvd_api_key=None, config=None, create_db=True, stop_update=[]):
         for cpe_triple in task.result()[0]:
             cpe_infos.append(cpe_triple)
     cpe_infos.sort(key=lambda cpe_info: cpe_info[0])
-
-    db_type = config["DATABASE"]["TYPE"]
-    db_name = config["DATABASE"]["NAME"]
-    if not is_safe_db_name(db_name, db_type.lower()):
-        print("Potentially malicious database name detected. Abort creation of database")
-        return False
 
     if create_db:
         if db_type == "sqlite" and os.path.isfile(db_name):

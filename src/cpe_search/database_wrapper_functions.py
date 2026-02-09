@@ -8,7 +8,7 @@ except ImportError:
     pass
 
 SAFE_DBNAME_REGEX_MARIADB = re.compile(r"^[\w\-]*$")
-SAFE_DBNAME_REGEX_SQLITE = re.compile(r"^[\w\-\. /]*$")
+SAFE_DBNAME_REGEX_SQLITE = re.compile(r"^[\w\-\. /\\:]*$")
 CONNECTION_POOL_SIZE = (
     os.cpu_count()
 )  # should be equal to number of cpu cores? (https://dba.stackexchange.com/a/305726)
