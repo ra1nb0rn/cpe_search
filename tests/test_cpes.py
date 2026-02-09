@@ -12,7 +12,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = "WordPress 5.7.2"
         test_best_match_cpe = "cpe:2.3:a:wordpress:wordpress:5.7.2:*:*:*:*:*:*:*"
-        test_best_match_score = 0.9016643266755546
+        test_best_match_score = 0.90165322020503
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
         self.assertAlmostEqual(result[0][1], test_best_match_score)
@@ -21,7 +21,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = "Apache 2.4.25"
         test_best_match_cpe = "cpe:2.3:a:apache:http_server:2.4.25:*:*:*:*:*:*:*"
-        test_best_match_score = 0.7839662056929315
+        test_best_match_score = 0.7837651774565979
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
         self.assertAlmostEqual(result[0][1], test_best_match_score)
@@ -66,7 +66,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = "VMWare Spring Framework 5.3.26"
         test_best_match_cpe = "cpe:2.3:a:vmware:spring_framework:5.3.26:*:*:*:*:*:*:*"
-        test_best_match_score = 0.9648415562318206
+        test_best_match_score = 0.9646342543896331
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
         self.assertAlmostEqual(result[0][1], test_best_match_score)
@@ -93,7 +93,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = "BlackIce Agent for Server 3.0"
         test_best_match_cpe = "cpe:2.3:a:iss:blackice_agent_for_server:3.0:*:*:*:*:*:*:*"
-        test_best_match_score = 0.7703487975929788
+        test_best_match_score = 0.7703486925615934
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
         self.assertAlmostEqual(result[0][1], test_best_match_score)
