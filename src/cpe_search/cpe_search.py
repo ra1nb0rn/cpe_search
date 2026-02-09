@@ -129,6 +129,11 @@ def parse_args():
         default=DEFAULT_CONFIG_FILE,
         help="A config file to use (default: config.json)",
     )
+    parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="Do not show progress bar when updating",
+    )
 
     args = parser.parse_args()
     if not args.update and not args.queries and not args.version and not args.download_database:
@@ -471,7 +476,9 @@ async def worker(headers, params, requestno, rate_limit, stop_update=[]):
         return None
 
 
-async def update(nvd_api_key=None, config=None, create_db=True, stop_update=[]):
+async def update(
+    nvd_api_key=None, config=None, create_db=True, stop_update=[], show_progress=False
+):
     """Pulls current CPE data via the CPE API for an initial database build"""
 
     # import required modules in case they haven't been imported yet
@@ -553,15 +560,32 @@ async def update(nvd_api_key=None, config=None, create_db=True, stop_update=[]):
         tasks.append(task)
         offset += API_CPE_RESULTS_PER_PAGE
 
-    while True:
-        finished_tasks, pending_tasks = await asyncio.wait(
-            tasks, return_when=asyncio.ALL_COMPLETED, timeout=2
-        )
-        if len(pending_tasks) < 1 or not UPDATE_SUCCESS or stop_update:
-            break
+    # collect task data and show progress bar if requested
+    with tqdm(
+        total=len(tasks),
+        unit="req",
+        unit_scale=True,
+        miniters=1,
+        desc="Progress",
+        disable=not show_progress,
+    ) as pbar:
+        last_finished_count = 0
+        while True:
+            finished_tasks, pending_tasks = await asyncio.wait(
+                tasks, return_when=asyncio.ALL_COMPLETED, timeout=2
+            )
+
+            pbar.update(len(finished_tasks) - last_finished_count)
+            last_finished_count = len(finished_tasks)
+
+            if len(pending_tasks) < 1 or not UPDATE_SUCCESS or stop_update:
+                break
 
     if not UPDATE_SUCCESS or stop_update:
         return False
+
+    if show_progress:
+        print("[+] Storing CPE data ...")
 
     cpe_infos = []
     for task in finished_tasks:
@@ -684,6 +708,9 @@ async def update(nvd_api_key=None, config=None, create_db=True, stop_update=[]):
                     final_deprecations[deprecated_cpe] = deprecation[deprecated_cpe]
         outfile.write("%s\n" % ujson.dumps(final_deprecations))
         outfile.close()
+
+    if show_progress:
+        print("[+] Done")
 
     return True
 
@@ -1603,10 +1630,12 @@ def main():
         download_file(
             LATEST_RELEASE_DL_URL + "cpe-search-dictionary.db3",
             config["DATABASE"]["NAME"],
-            True,
+            not args.no_progress,
         )
         download_file(
-            LATEST_RELEASE_DL_URL + "deprecated-cpes.json", config["DEPRECATED_CPES_FILE"], True
+            LATEST_RELEASE_DL_URL + "deprecated-cpes.json",
+            config["DEPRECATED_CPES_FILE"],
+            not args.no_progress,
         )
 
     if perform_update:
@@ -1618,7 +1647,9 @@ def main():
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        loop.run_until_complete(update(args.api_key, config))
+        loop.run_until_complete(
+            update(args.api_key, config, show_progress=not args.no_progress)
+        )
 
         if not UPDATE_SUCCESS:
             print("[-] Failed updating the local CPE database!")

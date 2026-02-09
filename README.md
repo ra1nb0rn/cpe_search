@@ -47,6 +47,7 @@ options:
                         Download cpe_search database from latest GitHub release
   -c CONFIG, --config CONFIG
                         A config file to use (default: config.json)
+  --no-progress         Do not show progress bar when updating
 ```
 Note that when querying software with ``-q`` you have to put the software information in quotes if it contains any spaces. Also, you can use ``-q`` multiple times to make multiple queries at once. Moreover, the output can be piped to be directly useable with other tools. Here are some examples:
 * Query *Sudo 1.8.2* to retrieve its CPE 2.3 string:
