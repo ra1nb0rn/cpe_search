@@ -1,6 +1,18 @@
 # Changelog
 This file keeps track of all notable changes between the different versions of cpe_search.
 
+## v0.2.6 - 2026-02-10
+### Added
+- Added a progress bar when downloading data from NVD
+
+### Changed
+- Increase rate limit for NVD download
+- Adjusted DB name restrictions for Windows
+- Disabled DB name checking with SQLite
+
+### Fixed
+- Made update process more resilient to NVD errors
+
 ## v0.2.5 - 2026-01-27
 ### Added
 - Added an abbreviation for Alibaba ACK

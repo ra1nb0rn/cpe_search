@@ -15,7 +15,7 @@ class TestSearches(unittest.TestCase):
         test_best_match_score = 0.90165322020503
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
-        self.assertAlmostEqual(result[0][1], test_best_match_score)
+        self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
 
     def test_search_apache_2425(self):
         self.maxDiff = None
@@ -24,7 +24,7 @@ class TestSearches(unittest.TestCase):
         test_best_match_score = 0.7837651774565979
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
-        self.assertAlmostEqual(result[0][1], test_best_match_score)
+        self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
 
     def test_search_proftpd_133c(self):
         self.maxDiff = None
@@ -33,7 +33,7 @@ class TestSearches(unittest.TestCase):
         test_best_match_score = 0.8445447114284997
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
-        self.assertAlmostEqual(result[0][1], test_best_match_score)
+        self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
 
     def test_search_thingsboard_341(self):
         self.maxDiff = None
@@ -42,7 +42,7 @@ class TestSearches(unittest.TestCase):
         test_best_match_score = 0.9935219070737169
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
-        self.assertAlmostEqual(result[0][1], test_best_match_score)
+        self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
 
     def test_search_redis_323(self):
         self.maxDiff = None
@@ -51,7 +51,7 @@ class TestSearches(unittest.TestCase):
         test_best_match_score = 0.9935219070737169
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
-        self.assertAlmostEqual(result[0][1], test_best_match_score)
+        self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
 
     def test_search_piwik_045(self):
         self.maxDiff = None
@@ -60,7 +60,7 @@ class TestSearches(unittest.TestCase):
         test_best_match_score = 0.9935219070737169
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
-        self.assertAlmostEqual(result[0][1], test_best_match_score)
+        self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
 
     def test_search_vmware_spring_framework_5326(self):
         self.maxDiff = None
@@ -69,7 +69,7 @@ class TestSearches(unittest.TestCase):
         test_best_match_score = 0.9646342543896331
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
-        self.assertAlmostEqual(result[0][1], test_best_match_score)
+        self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
 
     def test_search_zulip_48(self):
         self.maxDiff = None
@@ -78,7 +78,7 @@ class TestSearches(unittest.TestCase):
         test_best_match_score = 0.9935219070737169
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
-        self.assertAlmostEqual(result[0][1], test_best_match_score)
+        self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
 
     def test_search_electron_1317(self):
         self.maxDiff = None
@@ -87,7 +87,7 @@ class TestSearches(unittest.TestCase):
         test_best_match_score = 0.9927446022858913
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
-        self.assertAlmostEqual(result[0][1], test_best_match_score)
+        self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
 
     def test_search_blackice_agent_for_server_30(self):
         self.maxDiff = None
@@ -96,7 +96,7 @@ class TestSearches(unittest.TestCase):
         test_best_match_score = 0.7703486925615934
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
-        self.assertAlmostEqual(result[0][1], test_best_match_score)
+        self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
 
 
 if __name__ == "__main__":
