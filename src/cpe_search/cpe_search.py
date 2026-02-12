@@ -56,8 +56,6 @@ POPULAR_QUERY_CORRECTIONS = {
     "ansible": "redhat",
     "twig": "symfony",
     "proxmox ve": "virtual environment",
-    "nextjs": "vercel",
-    "next.js": "vercel",
     "ubuntu": "linux",
     "symfony": "sensiolabs",
     "electron": "electronjs",
@@ -801,7 +799,6 @@ def _get_alternative_queries(init_queries):
                         new_query_words2 += query_words[i + 1 :]
                     alt_queries.append(" ".join(new_query_words1))
                     alt_queries.append(" ".join(new_query_words2))
-
             if alt_queries:
                 alt_queries_mapping[query] += alt_queries
 
@@ -1440,7 +1437,8 @@ def cpe_matches_query(cpe, query):
             bad_match = True
 
     # check that at least one query term, apart from the version number, is contained in the CPE
-    if not bad_match:
+    # but skip for js libraries, because of the known problem of dots or dashes in the name
+    if not bad_match and "js" not in query:
         non_version_terms = [
             term.lower()
             for term in SPLIT_QUERY_TERMS_RE.split(query)
