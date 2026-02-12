@@ -1,6 +1,13 @@
 # Changelog
 This file keeps track of all notable changes between the different versions of cpe_search.
 
+## v0.2.7 - 2026-02-12
+### Changed
+- Remove arguably erroneous query correction
+
+### Fixed
+- Fix fuzzy search for JS libraries
+
 ## v0.2.6 - 2026-02-10
 ### Added
 - Added a progress bar when downloading data from NVD
