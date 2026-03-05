@@ -1387,7 +1387,14 @@ def get_all_cpes(config=None, db_cursor=None):
         db_cursor = conn.cursor()
         close_db_cursor = True
 
-    db_cursor.execute("SELECT cpe FROM cpe_entries")
+    if config["DATABASE"]["TYPE"] == "sqlite":
+        db_cursor.execute(
+            "SELECT DISTINCT cpe_product_prefix || cpe_version_suffix FROM cpe_entries JOIN cpe_product_prefixes ON cpe_entries.cpe_product_prefix_id = cpe_product_prefixes.cpe_product_prefix_id;"
+        )
+    else:
+        db_cursor.execute(
+            "SELECT DISTINCT CONCAT(cpe_product_prefix, cpe_version_suffix) FROM cpe_entries JOIN cpe_product_prefixes ON cpe_entries.cpe_product_prefix_id = cpe_product_prefixes.cpe_product_prefix_id;"
+        )
     cpes = [cpe[0] for cpe in db_cursor]
 
     if close_db_cursor:
