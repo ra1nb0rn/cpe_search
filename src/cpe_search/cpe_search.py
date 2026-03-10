@@ -1533,7 +1533,7 @@ def search_cpes(query, db_cursor=None, count=None, threshold=None, config=None):
                 new_pot_cpes = []
                 for pot_cpe in pot_cpes:
                     if any(
-                        word.lower() in query.lower() for word in pot_cpe[0].split(":")[3:5]
+                        word.lower() in pot_cpe[0] for word in TEXT_TO_VECTOR_RE.split(query)
                     ):
                         new_pot_cpes.append(pot_cpe)
                 return {"cpes": [], "pot_cpes": new_pot_cpes}
