@@ -1,6 +1,11 @@
 # Changelog
 This file keeps track of all notable changes between the different versions of cpe_search.
 
+## v0.2.8 - 2026-03-10
+### Fixed
+- Improve over-restrictive filtering of potential CPEs
+- Fix get_all_cpes(...) function
+
 ## v0.2.7 - 2026-02-12
 ### Changed
 - Remove arguably erroneous query correction
