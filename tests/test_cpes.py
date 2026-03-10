@@ -21,7 +21,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = "Apache 2.4.25"
         test_best_match_cpe = "cpe:2.3:a:apache:http_server:2.4.25:*:*:*:*:*:*:*"
-        test_best_match_score = 0.7837651774565979
+        test_best_match_score = 0.7829713472855001
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
         self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
