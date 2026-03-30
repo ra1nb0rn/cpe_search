@@ -81,5 +81,41 @@ Note that when querying software with ``-q`` you have to put the software inform
     0.6859944446591075)]
   ```
 
+## Using cpe_search as a Library
+You can also use *cpe_search* as a library, primarily via its `search_cpes` function:
+```py
+import json
+from cpe_search.cpe_search import search_cpes
+print(json.dumps(search_cpes("dell omsa 9.4.0.2"), indent=4))
+```
+This will return a dict similar to the following:
+```json
+{
+    "cpes": [...],
+    "pot_cpes": [
+        [
+            "cpe:2.3:a:dell:openmanage_server_administrator:9.4.0.2:*:*:*:*:*:*:*",
+            -0.7648908973691578
+        ],
+        [
+            "cpe:2.3:a:dell:openmanage_server_administrator:-:*:*:*:*:*:*:*",
+            0.7648908973691578
+        ],
+        [
+            "cpe:2.3:a:dell:openmanage_server_administrator:5.2.0:*:*:*:*:*:*:*",
+            0.7496154837764638
+        ],
+        [
+            "cpe:2.3:a:dell:openmanage_server_administrator_installer:9.4.0.2:*:*:*:*:*:*:*",
+            -0.6684871824798747
+        ],
+        [...]
+    ]
+```
+`cpes` and `pot_cpes` each contains a list of CPEs and their match/similarity score. The lists are sorted by the (absolute) score. `cpes` contains only existing CPEs that are determined to be a valid match.
+
+In difference, `pot_cpes` contains CPEs that are similar to the query but may not match it. It also contains CPEs that were automatically created by *cpe_search*, based on the [official NVD dictionary](https://nvd.nist.gov/products/cpe). This is *cpe_search*'s attempt to compensate for the NVD's dictionary occasionally being out of date regarding product versions. Such created CPEs are denoted by a negative similarity score, whose absolute value is identical to the CPE it was created from. The above query, `dell omsa 9.4.0.2`, is a good example of this, since there is no official CPE for that [specific version of Dell OMSA](https://www.dell.com/support/home/de-de/drivers/driversdetails?driverid=rgmcy).
+
+
 ## License
 *cpe_search* is licensed under the MIT license, see [here](https://github.com/ra1nb0rn/cpe_search/blob/master/LICENSE).
