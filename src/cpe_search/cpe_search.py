@@ -520,7 +520,7 @@ async def update(
 
     # initial first request, also to set parameters
     offset = 0
-    params = {"resultsPerPage": API_CPE_RESULTS_PER_PAGE, "startIndex": offset}
+    params = {"resultsPerPage": 1, "startIndex": offset}
     numTotalResults = -1
     exception = ""
     for _ in range(3):
