@@ -884,6 +884,11 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
     if threshold is None:
         threshold = float(config["CPE_SEARCH_THRESHOLD"])
 
+    # get score weights from config
+    score_weight_tf_idf = config.get("SIM_SCORE_WEIGHT_TF_IDF", 0.9)
+    score_weight_pop = config.get("SIM_SCORE_WEIGHT_POPULARITY", 0.03)
+    score_weight_subversion = config.get("SIM_SCORE_WEIGHT_SUBVERSION", 0.07)
+
     # create term frequencies and normalization factors for all queries
     queries = [query.lower() for query in queries_raw]
 
@@ -1087,7 +1092,9 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
                             sim_score_subversion = 0
 
             sim_score = (
-                0.9 * sim_score_tf_idf + 0.03 * sim_score_pop + 0.07 * sim_score_subversion
+                score_weight_tf_idf * sim_score_tf_idf
+                + score_weight_pop * sim_score_pop
+                + score_weight_subversion * sim_score_subversion
             )
 
             if threshold > 0 and sim_score < threshold:

@@ -6,5 +6,8 @@
     "DATABASE": {
         "NAME": "cpe-search-dictionary.db3",
         "TYPE": "sqlite"
-    }
+    },
+    "SIM_SCORE_WEIGHT_TF_IDF": 0.9,
+    "SIM_SCORE_WEIGHT_POPULARITY": 0.03,
+    "SIM_SCORE_WEIGHT_SUBVERSION": 0.07
 }
