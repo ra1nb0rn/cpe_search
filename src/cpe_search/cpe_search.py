@@ -986,33 +986,35 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
             all_cpe_infos.append(cpe_info[1:])  # omit product prefix ID
 
             # retrieve product and subversion counts
-            if cpe_prefix not in cpe_product_counts:
-                db_query = (
-                    "SELECT count FROM cpe_product_counts WHERE cpe_product_prefix_id = ?"
-                )
-                db_cursor.execute(db_query, (cpe_prefix_id,))
-                product_count = db_cursor.fetchall()
-                if product_count and product_count[0]:
-                    cpe_product_counts[cpe_prefix] = product_count[0][0]
-                else:
-                    # should not be able to happen
-                    cpe_product_counts[cpe_prefix] = 1
-                cpe_product_counts_sum += cpe_product_counts[cpe_prefix]
+            if score_weight_pop > 0:
+                if cpe_prefix not in cpe_product_counts:
+                    db_query = (
+                        "SELECT count FROM cpe_product_counts WHERE cpe_product_prefix_id = ?"
+                    )
+                    db_cursor.execute(db_query, (cpe_prefix_id,))
+                    product_count = db_cursor.fetchall()
+                    if product_count and product_count[0]:
+                        cpe_product_counts[cpe_prefix] = product_count[0][0]
+                    else:
+                        # should not be able to happen
+                        cpe_product_counts[cpe_prefix] = 1
+                    cpe_product_counts_sum += cpe_product_counts[cpe_prefix]
 
-            cpe_version = split_cpe(cpe_suffix, maxsplit=1)[0]
-            cpe_subversion = SPLIT_SUBVERSION_RE.match(cpe_version)
-            if not cpe_subversion:
-                cpe_subversion = cpe_version
-            else:
-                cpe_subversion = cpe_subversion.group(1)
-            if cpe_prefix not in cpe_product_subversion_counts:
-                cpe_product_subversion_counts[cpe_prefix] = {}
-            if cpe_subversion not in cpe_product_subversion_counts[cpe_prefix]:
-                cpe_product_subversion_counts[cpe_prefix][cpe_subversion] = 0
-            cpe_product_subversion_counts[cpe_prefix][cpe_subversion] += 1
-            if cpe_subversion not in cpe_product_subversion_counts_sums:
-                cpe_product_subversion_counts_sums[cpe_subversion] = 0
-            cpe_product_subversion_counts_sums[cpe_subversion] += 1
+            if score_weight_subversion > 0:
+                cpe_version = split_cpe(cpe_suffix, maxsplit=1)[0]
+                cpe_subversion = SPLIT_SUBVERSION_RE.match(cpe_version)
+                if not cpe_subversion:
+                    cpe_subversion = cpe_version
+                else:
+                    cpe_subversion = cpe_subversion.group(1)
+                if cpe_prefix not in cpe_product_subversion_counts:
+                    cpe_product_subversion_counts[cpe_prefix] = {}
+                if cpe_subversion not in cpe_product_subversion_counts[cpe_prefix]:
+                    cpe_product_subversion_counts[cpe_prefix][cpe_subversion] = 0
+                cpe_product_subversion_counts[cpe_prefix][cpe_subversion] += 1
+                if cpe_subversion not in cpe_product_subversion_counts_sums:
+                    cpe_product_subversion_counts_sums[cpe_subversion] = 0
+                cpe_product_subversion_counts_sums[cpe_subversion] += 1
 
         remaining -= max_results_per_query
 
@@ -1054,13 +1056,15 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
         cpe_abs = float(cpe_abs)
 
         # compute score for product "popularity"
-        if cpe_prefix not in cpe_product_popularity:
-            scale = cpe_product_counts_sum / len(cpe_product_counts)
-            sim_score_pop = cpe_product_counts[cpe_prefix] / cpe_product_counts_sum
-            sim_score_pop = min(sim_score_pop * scale, 1.0)  # boost
-            cpe_product_popularity[cpe_prefix] = sim_score_pop
-        else:
-            sim_score_pop = cpe_product_popularity[cpe_prefix]
+        sim_score_pop = 1
+        if score_weight_pop > 0:
+            if cpe_prefix not in cpe_product_popularity:
+                scale = cpe_product_counts_sum / len(cpe_product_counts)
+                sim_score_pop = cpe_product_counts[cpe_prefix] / cpe_product_counts_sum
+                sim_score_pop = min(sim_score_pop * scale, 1.0)  # boost
+                cpe_product_popularity[cpe_prefix] = sim_score_pop
+            else:
+                sim_score_pop = cpe_product_popularity[cpe_prefix]
 
         for query in queries:
             # compute TF-IDF sim score
@@ -1077,19 +1081,20 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
 
             # compute unified similarity score
             sim_score_subversion = 1
-            query_version, query_subversion = query_subversions.get(query, (None, None))
-            if query_version:
-                if ":" + query_version + ":" in cpe:
-                    sim_score_subversion = 1
-                else:
-                    if query_subversion:
-                        if query_subversion in cpe_product_subversion_counts[cpe_prefix]:
-                            sim_score_subversion = (
-                                cpe_product_subversion_counts[cpe_prefix][query_subversion]
-                                / cpe_product_subversion_counts_sums[query_subversion]
-                            )
-                        else:
-                            sim_score_subversion = 0
+            if score_weight_subversion > 0:
+                query_version, query_subversion = query_subversions.get(query, (None, None))
+                if query_version:
+                    if ":" + query_version + ":" in cpe:
+                        sim_score_subversion = 1
+                    else:
+                        if query_subversion:
+                            if query_subversion in cpe_product_subversion_counts[cpe_prefix]:
+                                sim_score_subversion = (
+                                    cpe_product_subversion_counts[cpe_prefix][query_subversion]
+                                    / cpe_product_subversion_counts_sums[query_subversion]
+                                )
+                            else:
+                                sim_score_subversion = 0
 
             sim_score = (
                 score_weight_tf_idf * sim_score_tf_idf
