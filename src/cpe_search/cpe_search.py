@@ -1087,7 +1087,7 @@ def _search_cpes(queries_raw, db_cursor=None, count=None, threshold=None, config
                             sim_score_subversion = 0
 
             sim_score = (
-                0.8 * sim_score_tf_idf + 0.11 * sim_score_pop + 0.09 * sim_score_subversion
+                0.9 * sim_score_tf_idf + 0.03 * sim_score_pop + 0.07 * sim_score_subversion
             )
 
             if threshold > 0 and sim_score < threshold:
