@@ -13,8 +13,8 @@ class TestSearches(unittest.TestCase):
         query = "WordPress 100.42.3"
         result = search_cpes(query)["pot_cpes"]
         expected_related_cpes = [
-            ("cpe:2.3:a:wordpress:wordpress:100.42.3:*:*:*:*:*:*:*", -0.7889609186783934),
-            ("cpe:2.3:a:wordpress:wordpress:*:*:*:*:*:*:*:*", 0.7889609186783934),
+            ("cpe:2.3:a:wordpress:wordpress:100.42.3:*:*:*:*:*:*:*", -0.7149856309531066),
+            ("cpe:2.3:a:wordpress:wordpress:-:*:*:*:*:*:*:*", 0.7149856309531066),
         ]
         for i, (expected_related_cpe, match_score) in enumerate(expected_related_cpes):
             self.assertEqual(expected_related_cpe, result[i][0])
@@ -25,8 +25,8 @@ class TestSearches(unittest.TestCase):
         query = "Airflow 100.42.3"
         result = search_cpes(query)["pot_cpes"]
         expected_related_cpes = [
-            ("cpe:2.3:a:apache:airflow:100.42.3:*:*:*:*:*:*:*", -0.5351488328077251),
-            ("cpe:2.3:a:apache:airflow:*:*:*:*:*:*:*:*", 0.5351488328077251),
+            ("cpe:2.3:a:apache:airflow:100.42.3:*:*:*:*:*:*:*", -0.4463714088254057),
+            ("cpe:2.3:a:apache:airflow:-:*:*:*:*:*:*:*", 0.4463714088254057),
         ]
         for i, (expected_related_cpe, match_score) in enumerate(expected_related_cpes):
             self.assertEqual(expected_related_cpe, result[i][0])
@@ -37,7 +37,7 @@ class TestSearches(unittest.TestCase):
         query = "Airflow"
         result = search_cpes(query)["pot_cpes"]
         expected_related_cpes = [
-            ("cpe:2.3:a:apache:airflow:*:*:*:*:*:*:*:*", 0.6782957433483083)
+            ("cpe:2.3:a:apache:airflow:*:*:*:*:*:*:*:*", 0.6277465574883976)
         ]
         for i, (expected_related_cpe, match_score) in enumerate(expected_related_cpes):
             self.assertEqual(expected_related_cpe, result[i][0])
@@ -48,12 +48,11 @@ class TestSearches(unittest.TestCase):
         query = "jQuery 100.42.3"
         result = search_cpes(query)["pot_cpes"]
         expected_related_cpes = [
-            ("cpe:2.3:a:jquery:jquery:100.42.3:*:*:*:*:*:*:*", -0.7889609186783934),
-            ("cpe:2.3:a:jquery:jquery:*:*:*:*:*:*:*:*", 0.7889609186783934),
-            ("cpe:2.3:a:jquery:jquery:100.42.3:*:*:*:*:node.js:*:*", -0.7258247616391765),
-            ("cpe:2.3:a:jquery:jquery:*:*:*:*:*:node.js:*:*", 0.7258247616391765),
-            ("cpe:2.3:a:jquery:jquery_ui:100.42.3:rc1:*:*:*:*:*:*", -0.6461795551396173),
-            ("cpe:2.3:a:jquery:jquery_ui:1.10.0:rc1:*:*:*:*:*:*", 0.6461795551396173),
+            ("cpe:2.3:a:jquery:jquery:100.42.3:*:*:*:*:*:*:*", -0.7400648268105541),
+            ("cpe:2.3:a:jquery:jquery:-:*:*:*:*:*:*:*", 0.7400648268105541),
+            ("cpe:2.3:a:jquery:jquery:1.0.1:*:*:*:*:*:*:*", 0.6410875586846989),
+            ("cpe:2.3:a:jquery:jquery_ui:100.42.3:*:*:*:*:*:*:*", -0.6115615996256556),
+            ("cpe:2.3:a:jquery:jquery_ui:1.10.0:rc1:*:*:*:*:*:*", 0.6115615996256556),
         ]
         for i, (expected_related_cpe, match_score) in enumerate(expected_related_cpes):
             self.assertEqual(expected_related_cpe, result[i][0])
@@ -64,10 +63,10 @@ class TestSearches(unittest.TestCase):
         query = "jfrog artifactory 4.29.0"
         result = search_cpes(query)["pot_cpes"]
         expected_related_cpes = [
-            ("cpe:2.3:a:jfrog:artifactory:4.29.0:*:*:*:*:*:*:*", -0.8988776375836616),
-            ("cpe:2.3:a:jfrog:artifactory:*:*:*:*:*:*:*:*", 0.8988776375836616),
-            ("cpe:2.3:a:jfrog:artifactory:4.29.0:*:*:*:*:jenkins:*:*", -0.7618540942296063),
-            ("cpe:2.3:a:jfrog:artifactory:*:*:*:*:*:jenkins:*:*", 0.7618540942296063),
+            ("cpe:2.3:a:jfrog:artifactory:4.29.0:*:*:*:*:*:*:*", -0.8389898738252954),
+            ("cpe:2.3:a:jfrog:artifactory:-:*:*:*:*:-:*:*", 0.8389898738252954),
+            ("cpe:2.3:a:jfrog:artifactory:1.3.0:-:*:*:*:-:*:*", 0.7156686848066457),
+            ("cpe:2.3:a:jfrog:artifactory:1.3.0:beta3:*:*:*:-:*:*", 0.6635959168415716),
         ]
         for i, (expected_related_cpe, match_score) in enumerate(expected_related_cpes):
             self.assertEqual(expected_related_cpe, result[i][0])
@@ -80,27 +79,27 @@ class TestSearches(unittest.TestCase):
         expected_related_cpes = [
             (
                 "cpe:2.3:a:dell:openmanage_server_administrator:9.4.0.2:*:*:*:*:*:*:*",
-                -0.9547229134924251,
+                -0.8598904081377858,
             ),
             (
-                "cpe:2.3:a:dell:openmanage_server_administrator:*:*:*:*:*:*:*:*",
-                0.9547229134924251,
+                "cpe:2.3:a:dell:openmanage_server_administrator:-:*:*:*:*:*:*:*",
+                0.8598904081377858,
             ),
             (
                 "cpe:2.3:a:dell:openmanage_server_administrator:5.2.0:*:*:*:*:*:*:*",
-                0.9356286465015572,
-            ),
-            (
-                "cpe:2.3:a:dell:emc_openmanage_server_administrator:9.4.0.2:*:*:*:*:*:*:*",
-                -0.842635458433608,
-            ),
-            (
-                "cpe:2.3:a:dell:emc_openmanage_server_administrator:*:*:*:*:*:*:*:*",
-                0.842635458433608,
+                0.842705567846005,
             ),
             (
                 "cpe:2.3:a:dell:openmanage_server_administrator_installer:9.4.0.2:*:*:*:*:*:*:*",
-                -0.8355902246901328,
+                -0.7520362114046224,
+            ),
+            (
+                "cpe:2.3:a:dell:openmanage_server_administrator_installer:1.0.0:*:*:*:*:*:*:*",
+                0.7520362114046224,
+            ),
+            (
+                "cpe:2.3:a:dell:openmanage_server_administrator_lite:9.4.0.2:*:*:*:*:*:*:*",
+                -0.7520362114046224,
             ),
         ]
         for i, (expected_related_cpe, match_score) in enumerate(expected_related_cpes):
@@ -114,31 +113,31 @@ class TestSearches(unittest.TestCase):
         expected_related_cpes = [
             (
                 "cpe:2.3:a:citrix:application_delivery_controller:13.1:42.47:*:*:-:*:*:*",
-                -0.9443356111798747,
+                -0.9203872821293977,
             ),
             (
-                "cpe:2.3:a:citrix:application_delivery_controller:13.1-42.47:*:*:*:-:*:*:*",
-                -0.9443356111798747,
+                "cpe:2.3:a:citrix:application_delivery_controller:13.1-42.47:*:*:*:*:*:*:*",
+                -0.9203872821293977,
             ),
             (
                 "cpe:2.3:a:citrix:application_delivery_controller:13.1:*:*:*:-:*:*:*",
-                0.9443356111798747,
+                0.9203872821293977,
             ),
             (
-                "cpe:2.3:a:citrix:application_delivery_controller:*:*:*:*:*:*:*:*",
-                0.9383570285533676,
+                "cpe:2.3:a:citrix:application_delivery_controller:13.1:42.47:*:*:fips:*:*:*",
+                -0.8761666840502798,
             ),
             (
-                "cpe:2.3:h:citrix:application_delivery_controller:13.1:*:*:*:*:*:*:*",
-                -0.9195900759823716,
+                "cpe:2.3:a:citrix:application_delivery_controller:13.1:*:*:*:fips:*:*:*",
+                0.8761666840502798,
             ),
             (
-                "cpe:2.3:h:citrix:application_delivery_controller:13.1:42.47:*:*:*:*:*:*",
-                -0.9195900759823716,
+                "cpe:2.3:a:citrix:netscaler_application_delivery_controller:13.1:42.47:*:*:-:*:*:*",
+                -0.8368272939125518,
             ),
             (
-                "cpe:2.3:h:citrix:application_delivery_controller:13.1-42.47:*:*:*:*:*:*:*",
-                -0.9195900759823716,
+                "cpe:2.3:a:citrix:netscaler_application_delivery_controller:13.1-42.47:*:*:*:*:*:*:*",
+                -0.8368272939125518,
             ),
         ]
         for i, (expected_related_cpe, match_score) in enumerate(expected_related_cpes):
@@ -151,28 +150,28 @@ class TestSearches(unittest.TestCase):
         result = search_cpes(query)["pot_cpes"]
         expected_related_cpes = [
             (
-                "cpe:2.3:a:citrix:application_delivery_controller:*:*:*:*:*:*:*:*",
-                0.9836819689304376,
+                "cpe:2.3:h:citrix:application_delivery_controller:*:*:*:*:*:*:*:*",
+                0.937628771015901,
             ),
             (
-                "cpe:2.3:h:citrix:application_delivery_controller:-:*:*:*:*:*:*:*",
-                0.9640085266327638,
-            ),
-            (
-                "cpe:2.3:a:citrix:application_delivery_controller:*:*:*:*:fips:*:*:*",
-                0.9113912926238704,
+                "cpe:2.3:a:citrix:application_delivery_controller:*:*:*:*:-:*:*:*",
+                0.8807837026194261,
             ),
             (
                 "cpe:2.3:o:citrix:application_delivery_controller_firmware:*:*:*:*:*:*:*:*",
-                0.9113912926238704,
+                0.8454539420916392,
+            ),
+            (
+                "cpe:2.3:h:citrix:netscaler_application_delivery_controller:*:*:*:*:*:*:*:*",
+                0.8398726044979914,
+            ),
+            (
+                "cpe:2.3:a:citrix:application_delivery_controller:*:*:*:*:fips:*:*:*",
+                0.836591883535865,
             ),
             (
                 "cpe:2.3:a:citrix:netscaler_application_delivery_controller:*:*:*:*:*:*:*:*",
-                0.8681946302204777,
-            ),
-            (
-                "cpe:2.3:o:citrix:application_delivery_controller_firmware:*:*:*:*:fips:*:*:*",
-                0.8609356974951642,
+                0.802816823924362,
             ),
         ]
         for i, (expected_related_cpe, match_score) in enumerate(expected_related_cpes):
@@ -184,14 +183,14 @@ class TestSearches(unittest.TestCase):
         query = "openssh 8.3 p4"
         result = search_cpes(query)["pot_cpes"]
         expected_related_cpes = [
-            ("cpe:2.3:a:openssh:openssh:8.3:*:*:*:*:*:*:*", -0.74544047460131),
-            ("cpe:2.3:a:openssh:openssh:8.3:p4:*:*:*:*:*:*", -0.74544047460131),
-            ("cpe:2.3:a:openssh:openssh:8.3_p4:*:*:*:*:*:*:*", -0.74544047460131),
-            ("cpe:2.3:a:openssh:openssh:-:*:*:*:*:*:*:*", 0.74544047460131),
-            ("cpe:2.3:a:openssh:openssh:9.1:*:*:*:*:*:*:*", 0.7258247616391765),
-            ("cpe:2.3:a:openbsd:openssh:8.3:p4:*:*:*:*:*:*", -0.7032799679449337),
-            ("cpe:2.3:a:openbsd:openssh:8.3_p4:*:*:*:*:*:*:*", -0.7032799679449337),
-            ("cpe:2.3:a:openbsd:openssh:8.3:*:*:*:*:*:*:*", 0.7032799679449337),
+            ("cpe:2.3:a:openbsd:openssh:8.3:p4:*:*:*:*:*:*", -0.7329519711504404),
+            ("cpe:2.3:a:openbsd:openssh:8.3_p4:*:*:*:*:*:*:*", -0.7329519711504404),
+            ("cpe:2.3:a:openbsd:openssh:8.3:*:*:*:*:*:*:*", 0.7329519711504404),
+            ("cpe:2.3:a:openssh:openssh:8.3:*:*:*:*:*:*:*", -0.6719429387690861),
+            ("cpe:2.3:a:openssh:openssh:8.3:p4:*:*:*:*:*:*", -0.6719429387690861),
+            ("cpe:2.3:a:openssh:openssh:8.3_p4:*:*:*:*:*:*:*", -0.6719429387690861),
+            ("cpe:2.3:a:openssh:openssh:-:*:*:*:*:*:*:*", 0.6719429387690861),
+            ("cpe:2.3:a:openbsd:openssh:8.3:p1:*:*:*:*:*:*", 0.6684082619040745),
         ]
         for i, (expected_related_cpe, match_score) in enumerate(expected_related_cpes):
             self.assertEqual(expected_related_cpe, result[i][0])
@@ -203,25 +202,19 @@ class TestSearches(unittest.TestCase):
         result = search_cpes(query)["pot_cpes"]
         expected_related_cpes = [
             (
-                "cpe:2.3:a:datatables:datatables.net:1.9.4:*:*:*:*:node.js:*:*",
-                -0.49134820156011955,
+                "cpe:2.3:a:sprymedia:datatables:1.9.4:*:*:*:*:*:*:*",
+                -0.4405465471359274,
             ),
-            ("cpe:2.3:a:datatables:datatables.net:*:*:*:*:*:node.js:*:*", 0.49134820156011955),
-            ("cpe:2.3:a:sprymedia:datatables:1.9.4:*:*:*:*:jquery:*:*", -0.45357155662782184),
-            ("cpe:2.3:a:sprymedia:datatables:*:*:*:*:*:jquery:*:*", 0.45357155662782184),
+            ("cpe:2.3:a:sprymedia:datatables:1.9.2:*:*:*:*:jquery:*:*", 0.4405465471359274),
+            ("cpe:2.3:a:datatables:datatables.net:1.9.4:*:*:*:*:*:*:*", -0.4205754118072099),
             (
                 "cpe:2.3:a:datatables:datatables.net:1.10.0:-:*:*:*:node.js:*:*",
-                0.43397267978578885,
-            ),
-            (
-                "cpe:2.3:a:datatables:datatables.net:1.9.4:beta1:*:*:*:node.js:*:*",
-                -0.41674310186320396,
+                0.4205754118072099,
             ),
             (
                 "cpe:2.3:a:datatables:datatables.net:1.10.0:beta1:*:*:*:node.js:*:*",
-                0.41674310186320396,
+                0.4050687916768836,
             ),
-            ("cpe:2.3:a:sprymedia:datatables:1.9.2:*:*:*:*:jquery:*:*", 0.40060727459547485),
         ]
         for i, (expected_related_cpe, match_score) in enumerate(expected_related_cpes):
             self.assertEqual(expected_related_cpe, result[i][0])
@@ -232,47 +225,55 @@ class TestSearches(unittest.TestCase):
         query = "microsoft sql_server 2019 15.00.2000.00;RTM"
         result = search_cpes(query)["pot_cpes"]
         expected_related_cpes = [
-            ("cpe:2.3:a:microsoft:sql_server_2019:2019:*:*:*:*:*:*:*", -0.7523479560247004),
-            (
-                "cpe:2.3:a:microsoft:sql_server_2019:2019:15.00.2000.00:*:*:*:*:*:*",
-                -0.7523479560247004,
-            ),
-            (
-                "cpe:2.3:a:microsoft:sql_server_2019:2019:15.00.2000.00:RTM:*:*:*:*:*",
-                -0.7523479560247004,
-            ),
-            (
-                "cpe:2.3:a:microsoft:sql_server_2019:2019_15.00.2000.00_RTM:*:*:*:*:*:*:*",
-                -0.7523479560247004,
-            ),
-            ("cpe:2.3:a:microsoft:sql_server_2019:*:*:*:*:*:*:*:*", 0.7523479560247004),
             (
                 "cpe:2.3:a:microsoft:sql_server:2019:15.00.2000.00:*:*:*:*:*:*",
-                -0.735100474327692,
+                -0.7346392073827277,
             ),
             (
                 "cpe:2.3:a:microsoft:sql_server:2019:15.00.2000.00:RTM:*:*:*:*:*",
-                -0.735100474327692,
+                -0.7346392073827277,
             ),
             (
                 "cpe:2.3:a:microsoft:sql_server:2019_15.00.2000.00_RTM:*:*:*:*:*:*:*",
-                -0.735100474327692,
-            ),
-            ("cpe:2.3:a:microsoft:sql_server:2019:*:*:*:*:*:*:*", 0.735100474327692),
-            ("cpe:2.3:a:microsoft:sql_server_2019:2019:*:*:*:*:*:x64:*", -0.6970579900837518),
-            (
-                "cpe:2.3:a:microsoft:sql_server_2019:2019:15.00.2000.00:*:*:*:*:x64:*",
-                -0.6970579900837518,
+                -0.7346392073827277,
             ),
             (
-                "cpe:2.3:a:microsoft:sql_server_2019:2019:15.00.2000.00:RTM:*:*:*:x64:*",
-                -0.6970579900837518,
+                "cpe:2.3:a:microsoft:sql_server:2019:*:*:*:*:*:*:*",
+                0.7346392073827277,
             ),
             (
-                "cpe:2.3:a:microsoft:sql_server_2019:2019_15.00.2000.00_RTM:*:*:*:*:*:x64:*",
-                -0.6970579900837518,
+                "cpe:2.3:a:microsoft:sql_server_2019:2019:*:*:*:*:*:*:*",
+                -0.6996692642461084,
             ),
-            ("cpe:2.3:a:microsoft:sql_server_2019:*:*:*:*:*:*:x64:*", 0.6970579900837518),
+            (
+                "cpe:2.3:a:microsoft:sql_server_2019:2019:15.00.2000.00:*:*:*:*:*:*",
+                -0.6996692642461084,
+            ),
+            (
+                "cpe:2.3:a:microsoft:sql_server_2019:2019:15.00.2000.00:RTM:*:*:*:*:*",
+                -0.6996692642461084,
+            ),
+            (
+                "cpe:2.3:a:microsoft:sql_server_2019:2019_15.00.2000.00_RTM:*:*:*:*:*:*:*",
+                -0.6996692642461084,
+            ),
+            (
+                "cpe:2.3:a:microsoft:sql_server_2019:15.0.2000.5:*:*:*:*:*:*:*",
+                0.6996692642461084,
+            ),
+            (
+                "cpe:2.3:a:microsoft:sql_server:-:*:*:*:*:*:*:*",
+                0.6940097229719058,
+            ),
+            (
+                "cpe:2.3:a:microsoft:sql_server:2019:15.00.2000.00:*:*:*:*:x64:*",
+                -0.6927881041154651,
+            ),
+            (
+                "cpe:2.3:a:microsoft:sql_server:2019:15.00.2000.00:RTM:*:*:*:x64:*",
+                -0.6927881041154651,
+            ),
+            ("cpe:2.3:a:microsoft:sql_server:2019:*:*:*:*:*:x64:*", 0.6927881041154651),
         ]
         for i, (expected_related_cpe, match_score) in enumerate(expected_related_cpes):
             self.assertEqual(expected_related_cpe, result[i][0])

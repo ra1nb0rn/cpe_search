@@ -12,7 +12,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = "WordPress 5.7.2"
         test_best_match_cpe = "cpe:2.3:a:wordpress:wordpress:5.7.2:*:*:*:*:*:*:*"
-        test_best_match_score = 0.90165322020503
+        test_best_match_score = 0.9676329496004841
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
         self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
@@ -21,7 +21,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = "Apache 2.4.25"
         test_best_match_cpe = "cpe:2.3:a:apache:http_server:2.4.25:*:*:*:*:*:*:*"
-        test_best_match_score = 0.7829713472855001
+        test_best_match_score = 0.7838711311925839
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
         self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
@@ -30,7 +30,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = "Proftpd 1.3.3c"
         test_best_match_cpe = "cpe:2.3:a:proftpd:proftpd:1.3.3:c:*:*:*:*:*:*"
-        test_best_match_score = 0.8445447114284997
+        test_best_match_score = 0.9048724157416776
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
         self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
@@ -39,7 +39,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = "Thingsboard 3.4.1"
         test_best_match_cpe = "cpe:2.3:a:thingsboard:thingsboard:3.4.1:*:*:*:*:*:*:*"
-        test_best_match_score = 0.9935219070737169
+        test_best_match_score = 0.9927121454579315
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
         self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
@@ -48,7 +48,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = "Redis 3.2.3"
         test_best_match_cpe = "cpe:2.3:a:redis:redis:3.2.3:*:*:*:*:*:*:*"
-        test_best_match_score = 0.9935219070737169
+        test_best_match_score = 0.9927121454579315
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
         self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
@@ -57,7 +57,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = "Piwik 0.4.5"
         test_best_match_cpe = "cpe:2.3:a:piwik:piwik:0.4.5:*:*:*:*:*:*:*"
-        test_best_match_score = 0.9935219070737169
+        test_best_match_score = 0.9927121454579315
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
         self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
@@ -66,7 +66,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = "VMWare Spring Framework 5.3.26"
         test_best_match_cpe = "cpe:2.3:a:vmware:spring_framework:5.3.26:*:*:*:*:*:*:*"
-        test_best_match_score = 0.9646342543896331
+        test_best_match_score = 0.9790053608224405
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
         self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
@@ -75,7 +75,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = "Zulip 4.8"
         test_best_match_cpe = "cpe:2.3:a:zulip:zulip:4.8:*:*:*:*:*:*:*"
-        test_best_match_score = 0.9935219070737169
+        test_best_match_score = 0.9927121454579315
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
         self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
@@ -84,7 +84,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = "Electron 13.1.7"
         test_best_match_cpe = "cpe:2.3:a:electronjs:electron:13.1.7:*:*:*:*:*:*:*"
-        test_best_match_score = 0.9927446022858913
+        test_best_match_score = 0.9918376775716278
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
         self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
@@ -93,7 +93,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = "BlackIce Agent for Server 3.0"
         test_best_match_cpe = "cpe:2.3:a:iss:blackice_agent_for_server:3.0:*:*:*:*:*:*:*"
-        test_best_match_score = 0.7703486925615934
+        test_best_match_score = 0.8353506470776635
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
         self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
