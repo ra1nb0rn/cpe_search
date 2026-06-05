@@ -1,6 +1,19 @@
 # Changelog
 This file keeps track of all notable changes between the different versions of cpe_search.
 
+## v0.2.9 - 2026-06-05
+### Added
+- Add documentation about library usage and negative scores
+- Make weights for computing search score configurable
+- Improve performance if no popularity or subversion weights are configured
+
+### Changed
+- Modified weights for computing search score
+
+### Fixed
+- Fixed bug in creation of new potential CPEs
+- Updated test cases
+
 ## v0.2.8 - 2026-03-10
 ### Fixed
 - Improve over-restrictive filtering of potential CPEs
