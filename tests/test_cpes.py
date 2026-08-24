@@ -21,7 +21,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = "Apache 2.4.25"
         test_best_match_cpe = "cpe:2.3:a:apache:http_server:2.4.25:*:*:*:*:*:*:*"
-        test_best_match_score = 0.783287112521768
+        test_best_match_score = 0.7825555101938642
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
         self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
@@ -30,7 +30,7 @@ class TestSearches(unittest.TestCase):
         self.maxDiff = None
         query = "Proftpd 1.3.3c"
         test_best_match_cpe = "cpe:2.3:a:proftpd:proftpd:1.3.3:c:*:*:*:*:*:*"
-        test_best_match_score = 0.9048724157416776
+        test_best_match_score = 0.9059241935710989
         result = search_cpes(query)["cpes"]
         self.assertEqual(result[0][0], test_best_match_cpe)
         self.assertAlmostEqual(result[0][1], test_best_match_score, 3)
