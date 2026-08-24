@@ -1,6 +1,10 @@
 # Changelog
 This file keeps track of all notable changes between the different versions of cpe_search.
 
+## v0.2.11 - 2026-08-24
+### Fixed
+- Updated test cases with new match scores due to new CPEs in NVD's dict
+
 ## v0.2.10 - 2026-08-24
 ### Changed
 - Slightly decrease NVD rate limit in update process to 40 per 30s to deal with latest issues.
