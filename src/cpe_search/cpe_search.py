@@ -507,8 +507,8 @@ async def update(
 
     if nvd_api_key:
         if not SILENT:
-            print("[+] API Key found - Requests will be sent at a rate of 45 per 30s.")
-        rate_limit = AsyncLimiter(45.0, 30.0)
+            print("[+] API Key found - Requests will be sent at a rate of 40 per 30s.")
+        rate_limit = AsyncLimiter(40.0, 30.0)
         headers = {"apiKey": nvd_api_key}
     else:
         if not SILENT:

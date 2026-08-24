@@ -1,6 +1,10 @@
 # Changelog
 This file keeps track of all notable changes between the different versions of cpe_search.
 
+## v0.2.10 - 2026-08-24
+### Changed
+- Slightly decrease NVD rate limit in update process to 40 per 30s to deal with latest issues.
+
 ## v0.2.9 - 2026-06-05
 ### Added
 - Add documentation about library usage and negative scores
