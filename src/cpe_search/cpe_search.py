@@ -31,7 +31,7 @@ QUERY_TERM_WEIGHT_EXP_FACTOR = -0.25
 GET_ALL_CPES_RE = re.compile(r"(.*);.*;.*")
 VERSION_MATCH_ZE_RE = re.compile(r"\b([\d]+\.?){1,4}\b")
 VERSION_MATCH_CPE_CREATION_RE = re.compile(
-    r"\b((\d[\da-zA-Z\.]{0,6})([\+\-\.\_\~ ][\da-zA-Z\.]+){0,4})[^\w\n]*$"
+    r"\b(\d[\da-zA-Z]*(?:[\+\-\.\_\~ ][\da-zA-Z]+)*)[^\w\n]*$"
 )
 VERSION_SPLIT_DIFF_CHARSETS_RE = re.compile(r"(?<=\d)(?=[^\d.])")
 SPLIT_SUBVERSION_RE = re.compile(r"(\w+\.\w*)\.?")
