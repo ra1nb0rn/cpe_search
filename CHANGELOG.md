@@ -1,6 +1,10 @@
 # Changelog
 This file keeps track of all notable changes between the different versions of cpe_search.
 
+## v0.2.12 - 2026-09-21
+### Fixed
+- Fix ReDoS vulnerability, coming from ambiguous character-class overlap
+
 ## v0.2.11 - 2026-08-24
 ### Fixed
 - Updated test cases with new match scores due to new CPEs in NVD's dict
